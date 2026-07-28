@@ -33,3 +33,17 @@ artifacts/macos/417Switch.app
 Claude Science 的登录状态、供应商配置和目录授权不在本项目目录中，仍保存在
 `~/.417switch/`，因此重新构建源码不会清空用户数据。
 
+## 发布与自动更新
+
+推送与 `source/package.json`、`source/src-tauri/tauri.conf.json` 版本一致的
+`v*` 标签后，GitHub Actions 会自动构建 universal macOS DMG、创建 GitHub
+Release，并上传 Tauri updater 所需的签名包和 `latest.json`。
+
+应用从以下地址检查更新：
+
+```text
+https://github.com/Vonfre/417switch/releases/latest/download/latest.json
+```
+
+首次启用该更新通道的版本需要手动安装 DMG；之后的新版本可在应用内下载、安装
+并自动重启。

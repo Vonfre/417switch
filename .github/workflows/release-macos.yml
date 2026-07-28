@@ -1,0 +1,83 @@
+name: Release macOS
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release-macos:
+    name: Build DMG and updater bundle
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.3
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: source/pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Install dependencies
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches app version
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          if [ "v${version}" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version v${version}" >&2
+            exit 1
+          fi
+
+      - name: Build and publish macOS Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          APPLE_SIGNING_IDENTITY: "-"
+        with:
+          projectPath: source
+          tagName: ${{ github.ref_name }}
+          releaseName: 417Switch ${{ github.ref_name }}
+          releaseBody: |
+            ## 417Switch ${{ github.ref_name }}
+
+            ### macOS 下载
+
+            下载 Release 中的 universal `.dmg`，同时支持 Apple Silicon 和 Intel Mac。
+
+            本 Release 也包含 Tauri updater 签名包和 `latest.json`。安装本版本后，
+            后续版本可由 417Switch 自动检查，并在应用内下载安装。
+
+            > 当前构建使用 ad-hoc 签名，首次打开时 macOS 可能要求右键选择“打开”。
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --target universal-apple-darwin
