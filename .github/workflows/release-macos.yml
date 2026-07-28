@@ -36,12 +36,16 @@ jobs:
           cache-dependency-path: source/pnpm-lock.yaml
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.95"
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      - name: Ensure universal macOS targets
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Verify Rust toolchain and targets
+        working-directory: source
+        run: |
+          rustup show active-toolchain
+          rustup target list --installed
 
       - name: Install dependencies
         working-directory: source
