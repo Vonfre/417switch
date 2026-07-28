@@ -40,6 +40,9 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
+      - name: Ensure universal macOS targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
       - name: Install dependencies
         working-directory: source
         run: pnpm install --frozen-lockfile
