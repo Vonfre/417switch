@@ -5,11 +5,12 @@ All notable changes to CC Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.18.2] - 2026-07-29
+## [3.18.3] - 2026-07-29
 
 ### Fixed
 
 - Claude Science now always opens in the user's default system browser instead of an embedded 417Switch WebView, while retaining the managed loopback URL and port validation.
+- The macOS GitHub Release workflow now creates the universal DMG with `hdiutil` after Tauri builds the signed updater bundle, avoiding intermittent failures in Tauri's Finder-styled DMG script.
 
 ## [3.18.0] - 2026-07-21
 

@@ -62,7 +62,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build and publish macOS Release
+      - name: Build and publish macOS updater bundle
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -87,4 +87,45 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
-          args: --target universal-apple-darwin
+          args: --target universal-apple-darwin --bundles app
+
+      - name: Create universal macOS DMG
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_path="src-tauri/target/universal-apple-darwin/release/bundle/macos/417Switch.app"
+          dmg_dir="src-tauri/target/universal-apple-darwin/release/bundle/dmg"
+          dmg_path="${dmg_dir}/417Switch_${GITHUB_REF_NAME#v}_universal.dmg"
+          staging_dir="${RUNNER_TEMP}/417switch-dmg-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          test -d "$app_path"
+          mkdir -p "$dmg_dir" "$staging_dir"
+          cp -R "$app_path" "$staging_dir/"
+          ln -s /Applications "$staging_dir/Applications"
+
+          for attempt in 1 2 3; do
+            if hdiutil create \
+              -volname "417Switch" \
+              -srcfolder "$staging_dir" \
+              -ov \
+              -format UDZO \
+              "$dmg_path"; then
+              exit 0
+            fi
+
+            rm -f "$dmg_path"
+            echo "DMG creation attempt ${attempt} failed; retrying..." >&2
+            sleep $((attempt * 5))
+          done
+
+          echo "Failed to create DMG after 3 attempts" >&2
+          exit 1
+
+      - name: Upload DMG to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            "source/src-tauri/target/universal-apple-darwin/release/bundle/dmg/417Switch_${GITHUB_REF_NAME#v}_universal.dmg" \
+            --clobber
