@@ -23,7 +23,7 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
 use crate::provider::Provider;
@@ -745,64 +745,23 @@ fn science_url(runtime: &RuntimeRecord) -> Result<String, String> {
     Ok(url)
 }
 
-fn open_science_surface(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
+fn validate_science_browser_url(url: &str) -> Result<Url, String> {
     let parsed = Url::parse(url).map_err(|e| format!("Science 登录地址无效：{e}"))?;
-    let allowed_host = matches!(parsed.host_str(), Some("localhost" | "127.0.0.1" | "::1"));
+    let allowed_host = matches!(
+        parsed.host_str(),
+        Some("localhost" | "127.0.0.1" | "::1" | "[::1]")
+    );
     if !allowed_host || parsed.port_or_known_default() != Some(SCIENCE_PORT) {
         return Err("Science 登录地址不是 417Switch 隔离 loopback 端口".into());
     }
+    Ok(parsed)
+}
 
-    if let Some(window) = app.get_webview_window("science") {
-        window
-            .navigate(parsed)
-            .map_err(|e| format!("刷新 Claude Science 窗口失败：{e}"))?;
-        let _ = window.unminimize();
-        let _ = window.show();
-        window
-            .set_focus()
-            .map_err(|e| format!("聚焦 Claude Science 窗口失败：{e}"))?;
-        return Ok(());
-    }
-
-    // The nonce page is Science's local loopback gate, not an Anthropic login.
-    // Auto-submit only that exact root page; after the redirect the query no
-    // longer contains a nonce, so unrelated or upstream sign-in buttons can
-    // never be clicked by this script.
-    const AUTO_LOCAL_SIGN_IN: &str = r#"
-(() => {
-  if (location.pathname !== '/' || !new URLSearchParams(location.search).has('nonce')) return;
-  let attempts = 0;
-  const timer = setInterval(() => {
-    attempts += 1;
-    const form = document.querySelector('form[action$="/api/auth/nonce"]');
-    if (form instanceof HTMLFormElement) {
-      clearInterval(timer);
-      form.requestSubmit();
-      return;
-    }
-    const button = [...document.querySelectorAll('button')]
-      .find((item) => item.textContent?.trim() === 'Sign in');
-    if (button) {
-      clearInterval(timer);
-      button.click();
-    } else if (attempts >= 100) {
-      clearInterval(timer);
-    }
-  }, 50);
-})();
-"#;
-
-    let window = WebviewWindowBuilder::new(app, "science", WebviewUrl::External(parsed))
-        .title("Claude Science · 417Switch")
-        .inner_size(1180.0, 820.0)
-        .min_inner_size(900.0, 650.0)
-        .initialization_script(AUTO_LOCAL_SIGN_IN)
-        .build()
-        .map_err(|e| format!("创建 Claude Science 窗口失败：{e}"))?;
-    window
-        .set_focus()
-        .map_err(|e| format!("聚焦 Claude Science 窗口失败：{e}"))?;
-    Ok(())
+fn open_science_surface(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
+    let parsed = validate_science_browser_url(url)?;
+    app.opener()
+        .open_url(parsed.as_str(), None::<String>)
+        .map_err(|e| format!("使用系统浏览器打开 Claude Science 失败：{e}"))
 }
 
 fn response_cookie(response: &reqwest::Response, name: &str) -> Option<String> {
@@ -1522,6 +1481,25 @@ mod tests {
     fn reserved_real_port_is_not_used() {
         assert_ne!(SCIENCE_PORT, REAL_SCIENCE_PORT);
         assert_ne!(SCIENCE_PREVIEW_PORT, REAL_SCIENCE_PORT);
+    }
+
+    #[test]
+    fn science_browser_url_accepts_only_the_managed_loopback_port() {
+        for url in [
+            "http://localhost:15890/?nonce=test",
+            "http://127.0.0.1:15890/?nonce=test",
+            "http://[::1]:15890/?nonce=test",
+        ] {
+            assert!(validate_science_browser_url(url).is_ok(), "{url}");
+        }
+
+        for url in [
+            "https://claude.ai/",
+            "http://127.0.0.1:8765/?nonce=test",
+            "http://127.0.0.1:15891/?nonce=test",
+        ] {
+            assert!(validate_science_browser_url(url).is_err(), "{url}");
+        }
     }
 
     #[test]
