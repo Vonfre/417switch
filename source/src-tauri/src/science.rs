@@ -40,13 +40,13 @@ const VIRTUAL_EMAIL: &str = "417switch@localhost.invalid";
 const HKDF_INFO: &[u8] = b"operon:aes-256-gcm:oauth";
 const AAD: &[u8] = b"v2:oauth";
 const MODELS_CREATED_AT: &str = "2026-01-01T00:00:00Z";
-const SCIENCE_LAUNCH_MODE: &str = "real-home-explicit-config-science-provider-zh-cn-v3";
-const SCIENCE_ZH_PATCH_VERSION: &str = "zh-cn-v1";
+const SCIENCE_LAUNCH_MODE: &str = "real-home-explicit-config-science-provider-zh-cn-v5-auto-update";
+const SCIENCE_ZH_PATCH_VERSION: &str = "zh-cn-v3";
 const BUN_TRAILER: &[u8] = b"\n---- Bun! ----\n";
-const SCIENCE_ZH_PATCH_SENTINEL: &str = "417switch-science-zh-cn-v1";
-const SCIENCE_ZH_PATCH_ASSET: &str = "web-dist/assets/417switch-zh-cn-v1.js";
-const SCIENCE_ZH_PATCH_TAG: &str = r#"<script defer data-417switch-science-zh-cn-v1 src="./assets/417switch-zh-cn-v1.js"></script>"#;
-const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v1
+const SCIENCE_ZH_PATCH_SENTINEL: &str = "417switch-science-zh-cn-v3";
+const SCIENCE_ZH_PATCH_ASSET: &str = "web-dist/assets/417switch-zh-cn-v3.js";
+const SCIENCE_ZH_PATCH_TAG: &str = r#"<script defer data-417switch-science-zh-cn-v3 src="./assets/417switch-zh-cn-v3.js"></script>"#;
+const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v3
 (() => {
   'use strict';
   if (document.documentElement.dataset.switch417ScienceZhCn) return;
@@ -350,10 +350,141 @@ const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v1
     ,'This session': '此会话'
     ,'This session\'s model': '此会话的模型'
     ,'Unknown connector': '未知连接器'
+    ,'Capabilities': '功能'
+    ,'Specialists': '专家'
+    ,'Memory': '记忆'
+    ,'Network': '网络'
+    ,'Workspace': '工作区'
+    ,'Credentials': '凭据'
+    ,'Storage': '存储'
+    ,'Usage': '用量'
+    ,'Organization': '组织'
+    ,'Organization data': '组织数据'
+    ,'Share this ID with Anthropic support when reporting an issue.': '报告问题时，请将此 ID 提供给 Anthropic 支持团队。'
+    ,'Copy projects and skills from another organization you belong to.': '从你所属的其他组织复制项目和技能。'
+    ,'Manage billing': '管理订阅'
+    ,'plan': '套餐'
+    ,'Applied as your default for new sessions.': '应用为新会话的默认模型。'
+    ,'Reasoning effort': '推理强度'
+    ,'How long Claude thinks before responding. Higher effort is more thorough but slower and uses more of your limits. Applies to Opus models.': '控制 Claude 回答前的思考时长。强度越高，推理越充分，但速度更慢且会消耗更多额度。适用于 Opus 模型。'
+    ,'Low': '低'
+    ,'Medium': '中'
+    ,'High': '高'
+    ,'Subagent model': '子智能体模型'
+    ,'Model used by subagents when Delegation is on.': '启用任务委派后，子智能体使用的模型。'
+    ,'Reviewer model': '审查模型'
+    ,'Model the Reviewer uses for background review when work completes. Applies to all sessions; a session\'s own Reviewer model setting overrides it.': '工作完成后，审查器在后台检查时使用的模型。此设置应用于所有会话；会话自己的审查模型设置会覆盖它。'
+    ,'Automatically switch models when a message is flagged': '消息被标记时自动切换模型'
+    ,'When a safety filter pauses a session, retry it right away on the suggested fallback model instead of waiting for you. Applies to every project and session on this Claude Science install.': '当安全过滤器暂停会话时，立即使用建议的备用模型重试，无需等待你操作。此设置应用于本机 Claude Science 的所有项目和会话。'
+    ,'Licensing': '许可'
+    ,'Use intent': '使用目的'
+    ,'Selects which license notice you see for skills that restrict non-commercial use.': '选择遇到限制非商业用途的技能时显示的许可提示。'
+    ,'Commercial use (default)': '商业用途（默认）'
+    ,'Resources restricted to non-commercial use will ask you to confirm a commercial license before loading.': '加载仅限非商业用途的资源前，会要求你确认拥有商业许可。'
+    ,'Non-commercial use': '非商业用途'
+    ,'Declare that your use is non-commercial (academic, personal, or other non-commercial purposes).': '声明你的用途为非商业用途（学术、个人或其他非商业目的）。'
+    ,'Couldn\'t load the current use intent.': '无法加载当前使用目的。'
+    ,'Appearance': '外观'
+    ,'Response font': '回答字体'
+    ,'Serif': '衬线体'
+    ,'Sans serif': '无衬线体'
+    ,'Build:': '构建版本：'
+    ,'Channel:': '更新通道：'
+    ,'Last checked': '上次检查'
+    ,'Version and update channel': '版本和更新通道'
+    ,'Automatic updates are off': '自动更新已关闭'
+    ,'Automatic updates are on': '自动更新已开启'
+    ,'Updates are applied by the VM automatically': '更新由虚拟机自动应用'
+    ,'Check for updates': '检查更新'
+    ,'Checking…': '正在检查…'
+    ,'Update available': '有可用更新'
+    ,'Applying…': '正在应用…'
+    ,'Restart to update': '重启并更新'
+    ,'Update now': '立即更新'
+    ,'You\'re up to date.': '当前已是最新版本。'
+    ,'Third-Party Licenses': '第三方许可'
+    ,'Directory connectors unavailable': '目录连接器不可用'
+    ,'Showing your last-known connectors': '正在显示上次已知的连接器'
+    ,'Your claude.ai session has expired. Sign in again to restore your directory connectors.': '你的 claude.ai 会话已过期。请重新登录以恢复目录连接器。'
+    ,'Your claude.ai session has expired — the list below may be out of date. Sign in again to refresh it.': '你的 claude.ai 会话已过期，下面的列表可能不是最新的。请重新登录以刷新。'
+    ,'You\'re not signed in to claude.ai — the list below is from a cached copy and may be out of date. Run `claude-science login` to refresh it.': '你尚未登录 claude.ai，下面显示的是缓存副本，可能不是最新的。请运行 `claude-science login` 刷新。'
+    ,'Directory connector access is being set up automatically. Check back shortly, or sign in again to set it up now.': '正在自动配置目录连接器访问权限。请稍后再试，或立即重新登录以完成配置。'
+    ,'Directory connector access is being set up automatically — the list below may be out of date until then. Sign in again to refresh it now.': '正在自动配置目录连接器访问权限，完成前下面的列表可能不是最新的。你也可以立即重新登录进行刷新。'
+    ,'Can\'t reach claude.ai': '无法连接 claude.ai'
+    ,'Check your network connection. If you\'re on a corporate network, verify your SSO/VPN session is active. Directory connectors will reappear once claude.ai is reachable.': '请检查网络连接。如果你使用企业网络，请确认 SSO/VPN 会话仍然有效。恢复连接 claude.ai 后，目录连接器会重新出现。'
+    ,'claude.ai is responding slowly': 'claude.ai 响应缓慢'
+    ,'claude.ai is responding slowly — directory connectors will appear shortly. No action needed on your end.': 'claude.ai 响应缓慢，目录连接器稍后会出现，无需你进行操作。'
+    ,'Default': '默认'
+    ,'Forward': '前进'
+    ,'Maximize': '最大化'
+    ,'Restore size': '恢复大小'
+    ,'Package mirror': '软件包镜像'
+    ,'Copied': '已复制'
+    ,'Import…': '导入…'
+    ,'Skip to main content': '跳到主要内容'
+    ,'Recent sessions': '最近会话'
+    ,'sessions': '个会话'
+    ,'Project actions': '项目操作'
+    ,'Not signed in, or your session has expired. Please sign out and sign in again.': '尚未登录或会话已过期。请退出登录后重新登录。'
+    ,'Clear selection': '清除选择'
+    ,'Contact email': '联系邮箱'
+    ,'Not set': '未设置'
+    ,'When allowed, shared with research data services that ask for a contact email (such as those run by NCBI, EBI, and OurResearch) on requests made on your behalf.': '获得允许后，当研究数据服务（例如 NCBI、EBI 和 OurResearch 提供的服务）要求联系邮箱时，会在代表你发出的请求中提供该邮箱。'
+    ,'Set': '设置'
+    ,'Diagnostics': '诊断'
+    ,'Bundles system logs for sharing with support. File paths and host names are redacted. Conversations and credentials aren\'t included. Review the bundle before sharing.': '打包系统日志以便提供给支持团队。文件路径和主机名会被隐藏，不包含对话和凭据。分享前请先检查压缩包内容。'
+    ,'Filter connectors': '筛选连接器'
+    ,'Search connectors…': '搜索连接器…'
+    ,'All': '全部'
+    ,'Featured': '精选'
+    ,'Research connectors from Anthropic': 'Anthropic 提供的科研连接器'
+    ,'Directory': '目录'
+    ,'Syncs with the Claude Connectors Directory': '与 Claude 连接器目录同步'
+    ,'Custom': '自定义'
+    ,'Connectors you added': '你添加的连接器'
+    ,'Add a custom connector to connect your own server': '添加自定义连接器以连接你自己的服务器'
+    ,'Browse Connectors Directory': '浏览连接器目录'
+    ,'Remote URL': '远程 URL'
+    ,'Connect a web MCP server': '连接 Web MCP 服务器'
+    ,'Local command': '本地命令'
+    ,'Run a local MCP server on this machine': '在此电脑上运行本地 MCP 服务器'
   }));
 
   const skip = new Set(['SCRIPT', 'STYLE', 'CODE', 'PRE', 'TEXTAREA', 'KBD', 'SAMP']);
-  const translate = value => exact.get(value) || value;
+  const relativeTime = [
+    [/^(\d+)m ago$/, match => `${match[1]} 分钟前`],
+    [/^(\d+)h ago$/, match => `${match[1]} 小时前`],
+    [/^(\d+)d ago$/, match => `${match[1]} 天前`]
+  ];
+  const translate = value => {
+    const translated = exact.get(value);
+    if (translated) return translated;
+    if (value === 'just now') return '刚刚';
+    for (const [pattern, replacement] of relativeTime) {
+      const match = value.match(pattern);
+      if (match) return replacement(match);
+    }
+    let match = value.match(/^All \((\d+)\)$/);
+    if (match) return `全部（${match[1]}）`;
+    match = value.match(/^active (\d+)([mhd]) ago$/);
+    if (match) {
+      const unit = {m: '分钟', h: '小时', d: '天'}[match[2]];
+      return `${match[1]} ${unit}前活跃`;
+    }
+    match = value.match(/^(\d+) minutes? ago$/);
+    if (match) return `${match[1]} 分钟前`;
+    for (const [prefix, translatedPrefix] of [
+      ['Account menu — ', '账户菜单 — '],
+      ['Open project ', '打开项目 '],
+      ['View ', '查看 '],
+      ['Disable ', '停用 '],
+      ['Enable ', '启用 '],
+      ['Copy organization ID ', '复制组织 ID ']
+    ]) {
+      if (value.startsWith(prefix)) return translatedPrefix + value.slice(prefix.length);
+    }
+    return value;
+  };
   const translateText = node => {
     const parent = node.parentElement;
     if (!parent || skip.has(parent.tagName) || parent.closest('[contenteditable="true"]')) return;
@@ -1841,7 +1972,6 @@ fn apply_science_serve_args(command: &mut Command, assets_root: &Path) {
         .arg("--assets-root")
         .arg(assets_root)
         .arg("--no-browser")
-        .arg("--no-auto-update")
         .arg("--detached");
 }
 
@@ -2276,6 +2406,9 @@ mod tests {
         assert!(once.find(SCIENCE_ZH_PATCH_SENTINEL).unwrap() < once.find("</head>").unwrap());
         assert!(inject_science_zh_patch("<html><body></body></html>").is_err());
         assert!(inject_science_zh_patch("<html><head></head></html>").is_err());
+        assert!(SCIENCE_ZH_PATCH_SCRIPT.contains("Directory connectors unavailable"));
+        assert!(SCIENCE_ZH_PATCH_SCRIPT.contains("Applied as your default for new sessions."));
+        assert!(SCIENCE_ZH_PATCH_SCRIPT.contains("Automatic updates are off"));
     }
 
     #[test]
@@ -2313,7 +2446,7 @@ mod tests {
     }
 
     #[test]
-    fn science_serve_command_uses_patched_assets_root() {
+    fn science_serve_command_uses_patched_assets_root_and_allows_auto_updates() {
         let assets = Path::new("/tmp/417switch-science-assets-test");
         let mut command = Command::new("claude-science");
         apply_science_serve_args(&mut command, assets);
@@ -2326,6 +2459,7 @@ mod tests {
             .position(|value| value == "--assets-root")
             .unwrap();
         assert_eq!(args.get(position + 1).map(String::as_str), assets.to_str());
+        assert!(!args.iter().any(|value| value == "--no-auto-update"));
     }
 
     #[test]
