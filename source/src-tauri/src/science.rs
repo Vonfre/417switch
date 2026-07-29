@@ -10,6 +10,7 @@ use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
+use flate2::read::GzDecoder;
 use hkdf::Hkdf;
 use reqwest::header::{COOKIE, ORIGIN, SET_COOKIE};
 use serde::{Deserialize, Serialize};
@@ -17,10 +18,10 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use tauri_plugin_opener::OpenerExt;
@@ -39,7 +40,367 @@ const VIRTUAL_EMAIL: &str = "417switch@localhost.invalid";
 const HKDF_INFO: &[u8] = b"operon:aes-256-gcm:oauth";
 const AAD: &[u8] = b"v2:oauth";
 const MODELS_CREATED_AT: &str = "2026-01-01T00:00:00Z";
-const SCIENCE_LAUNCH_MODE: &str = "real-home-explicit-config-science-provider-v2";
+const SCIENCE_LAUNCH_MODE: &str = "real-home-explicit-config-science-provider-zh-cn-v3";
+const SCIENCE_ZH_PATCH_VERSION: &str = "zh-cn-v1";
+const BUN_TRAILER: &[u8] = b"\n---- Bun! ----\n";
+const SCIENCE_ZH_PATCH_SENTINEL: &str = "417switch-science-zh-cn-v1";
+const SCIENCE_ZH_PATCH_ASSET: &str = "web-dist/assets/417switch-zh-cn-v1.js";
+const SCIENCE_ZH_PATCH_TAG: &str = r#"<script defer data-417switch-science-zh-cn-v1 src="./assets/417switch-zh-cn-v1.js"></script>"#;
+const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v1
+(() => {
+  'use strict';
+  if (document.documentElement.dataset.switch417ScienceZhCn) return;
+  document.documentElement.dataset.switch417ScienceZhCn = '1';
+  document.documentElement.lang = 'zh-CN';
+
+  const exact = new Map(Object.entries({
+    'New session': '新建会话',
+    'New Session': '新建会话',
+    'New project': '新建项目',
+    'New Project': '新建项目',
+    'Projects': '项目',
+    'Project': '项目',
+    'Sessions': '会话',
+    'Session': '会话',
+    'Files': '文件',
+    'File': '文件',
+    'Customize': '自定义',
+    'Settings': '设置',
+    'General': '通用',
+    'Appearance': '外观',
+    'Permissions': '权限',
+    'Compute': '计算',
+    'Skills': '技能',
+    'Skill': '技能',
+    'Connectors': '连接器',
+    'Connector': '连接器',
+    'Search': '搜索',
+    'Search projects': '搜索项目',
+    'Search sessions': '搜索会话',
+    'Search files': '搜索文件',
+    'Upload': '上传',
+    'Upload files': '上传文件',
+    'Cancel': '取消',
+    'Save': '保存',
+    'Save changes': '保存更改',
+    'Delete': '删除',
+    'Delete project': '删除项目',
+    'Continue': '继续',
+    'Sign in': '登录',
+    'Sign out': '退出登录',
+    'Start': '开始',
+    'Stop': '停止',
+    'Retry': '重试',
+    'Run': '运行',
+    'Running': '运行中',
+    'Share': '分享',
+    'Download': '下载',
+    'Open': '打开',
+    'Open file': '打开文件',
+    'Close': '关闭',
+    'Back': '返回',
+    'Next': '下一步',
+    'Done': '完成',
+    'Create': '创建',
+    'Edit': '编辑',
+    'Rename': '重命名',
+    'Duplicate': '创建副本',
+    'Move': '移动',
+    'Copy': '复制',
+    'Refresh': '刷新',
+    'Add': '添加',
+    'Remove': '移除',
+    'Confirm': '确认',
+    'Apply': '应用',
+    'Reset': '重置',
+    'Clear': '清除',
+    'Select': '选择',
+    'Select all': '全选',
+    'Learn more': '了解更多',
+    'Show more': '显示更多',
+    'Show less': '收起',
+    'Details': '详情',
+    'Overview': '概览',
+    'Activity': '活动',
+    'History': '历史记录',
+    'Recent': '最近',
+    'Favorites': '收藏',
+    'Archived': '已归档',
+    'Archive': '归档',
+    'Unarchive': '取消归档',
+    'Name': '名称',
+    'Description': '说明',
+    'Status': '状态',
+    'Created': '创建时间',
+    'Updated': '更新时间',
+    'Type': '类型',
+    'Size': '大小',
+    'Actions': '操作',
+    'Enabled': '已启用',
+    'Disabled': '已停用',
+    'Enable': '启用',
+    'Disable': '停用',
+    'Connected': '已连接',
+    'Disconnected': '未连接',
+    'Connect': '连接',
+    'Disconnect': '断开连接',
+    'Loading...': '正在加载…',
+    'Saving...': '正在保存…',
+    'Uploading...': '正在上传…',
+    'Processing...': '正在处理…',
+    'No results': '没有结果',
+    'No files': '没有文件',
+    'No projects yet': '还没有项目',
+    'No sessions yet': '还没有会话',
+    'Something went wrong': '出现了一些问题',
+    'Try again': '重试',
+    'Are you sure?': '确定要继续吗？',
+    'This action cannot be undone.': '此操作无法撤销。',
+    'Ask Claude anything': '向 Claude 提问',
+    'What would you like to work on?': '你想研究什么？',
+    'Send message': '发送消息',
+    'Attach files': '添加附件',
+    'Thinking': '思考中',
+    'Working': '处理中',
+    'Completed': '已完成',
+    'Failed': '失败',
+    'Pending': '等待中',
+    'Queued': '排队中',
+    'Approve': '批准',
+    'Deny': '拒绝',
+    'Allow': '允许',
+    'Always allow': '始终允许',
+    'Allow once': '仅允许一次',
+    'Model': '模型',
+    'Data': '数据',
+    'Sources': '来源',
+    'Artifacts': '产物',
+    'Preview': '预览',
+    'Terminal': '终端',
+    'Environment': '环境',
+    'Local': '本地',
+    'Remote': '远程',
+    'Documentation': '文档',
+    'Help': '帮助',
+    'Feedback': '反馈',
+    'Account': '账户',
+    'Language': '语言',
+    'Theme': '主题',
+    'System': '跟随系统',
+    'Light': '浅色',
+    'Dark': '深色'
+    ,'About': '关于'
+    ,'Active model': '当前模型'
+    ,'Add & configure': '添加并配置'
+    ,'Add connector': '添加连接器'
+    ,'Add to message': '添加到消息'
+    ,'Agree & save': '同意并保存'
+    ,'Allow for this conversation on': '本次会话允许访问'
+    ,'Allow for this project on': '本项目允许访问'
+    ,'Allow globally on': '全局允许访问'
+    ,'Allow scope': '允许范围'
+    ,'Allowed domains': '已允许的域名'
+    ,'Always allow downloads from': '始终允许从此处下载'
+    ,'Always allow this host': '始终允许此主机'
+    ,'Ask each time': '每次询问'
+    ,'Attach connector': '添加连接器'
+    ,'Attach skill': '添加技能'
+    ,'Back to Claude': '返回 Claude'
+    ,'Back to dashboard': '返回主页'
+    ,'Back to parent': '返回上一级'
+    ,'Back to session root': '返回会话根目录'
+    ,'Back to sessions': '返回会话列表'
+    ,'Back to settings': '返回设置'
+    ,'Bookmark': '添加书签'
+    ,'Bookmarked': '已添加书签'
+    ,'Bookmarks': '书签'
+    ,'Branch in new session': '在新会话中分支'
+    ,'Browse host filesystem': '浏览本机文件系统'
+    ,'Browsing artifacts': '正在浏览产物'
+    ,'Browsing sessions': '正在浏览会话'
+    ,'Cancel edit': '取消编辑'
+    ,'Cancelled': '已取消'
+    ,'Change': '更改'
+    ,'Chat': '聊天'
+    ,'Chats': '聊天'
+    ,'Clear search': '清除搜索'
+    ,'Close Files': '关闭文件面板'
+    ,'Close artifact': '关闭产物'
+    ,'Close others': '关闭其他标签页'
+    ,'Close session': '关闭会话'
+    ,'Close settings': '关闭设置'
+    ,'Close side chat': '关闭侧边聊天'
+    ,'Close tab': '关闭标签页'
+    ,'Cloud compute': '云端计算'
+    ,'Connector tools': '连接器工具'
+    ,'Connectors & skills': '连接器与技能'
+    ,'Current session': '当前会话'
+    ,'Default model': '默认模型'
+    ,'Delete agent': '删除智能体'
+    ,'Delete annotation': '删除批注'
+    ,'Delete bookmark': '删除书签'
+    ,'Delete comment': '删除评论'
+    ,'Delete skill': '删除技能'
+    ,'Detach connector': '移除连接器'
+    ,'Detach skill': '移除技能'
+    ,'Distill this session': '提炼此会话'
+    ,'Download All (Zip)': '全部下载（ZIP）'
+    ,'Download artifacts': '下载产物'
+    ,'Download logs': '下载日志'
+    ,'Download this artifact': '下载此产物'
+    ,'Drop files to attach': '拖放文件以添加附件'
+    ,'Edit bookmark': '编辑书签'
+    ,'Edit message': '编辑消息'
+    ,'Edit session': '编辑会话'
+    ,'Edit skill': '编辑技能'
+    ,'Export session': '导出会话'
+    ,'Feedback comment': '反馈说明'
+    ,'Full history': '完整历史记录'
+    ,'Give negative feedback': '提供负面反馈'
+    ,'Give positive feedback': '提供正面反馈'
+    ,'Go back': '返回'
+    ,'Host files': '本机文件'
+    ,'Jump to bookmark': '跳转到书签'
+    ,'Jump to your last message': '跳转到你的上一条消息'
+    ,'Load skill': '加载技能'
+    ,'Loading allowlist': '正在加载允许列表'
+    ,'Local compute': '本地计算'
+    ,'Manage compute': '管理计算资源'
+    ,'Match session model': '使用会话模型'
+    ,'Messages': '消息'
+    ,'Model endpoint': '模型端点'
+    ,'Model endpoints': '模型端点'
+    ,'Model unavailable': '模型不可用'
+    ,'More models': '更多模型'
+    ,'Move session to project': '将会话移至项目'
+    ,'New category': '新建分类'
+    ,'New skill': '新建技能'
+    ,'New specialist': '新建专家'
+    ,'No allowed domains yet': '还没有已允许的域名'
+    ,'No compute running in this session': '此会话中没有运行中的计算任务'
+    ,'No folders yet.': '还没有文件夹。'
+    ,'No issues found': '未发现问题'
+    ,'No models': '没有可用模型'
+    ,'No search results': '没有搜索结果'
+    ,'No session open. Start one from the left rail.': '尚未打开会话，请从左侧栏开始。'
+    ,'No subfolders.': '没有子文件夹。'
+    ,'No text output': '没有文本输出'
+    ,'Open Claude.ai': '打开 Claude.ai'
+    ,'Open above': '在上方打开'
+    ,'Open below': '在下方打开'
+    ,'Open fullscreen': '全屏打开'
+    ,'Open in Artifact Viewer': '在产物查看器中打开'
+    ,'Open in Files': '在文件面板中打开'
+    ,'Open in split view': '在分屏中打开'
+    ,'Open in viewer': '在查看器中打开'
+    ,'Open network settings': '打开网络设置'
+    ,'Open plan in panel': '在面板中打开计划'
+    ,'Open subagent transcript': '打开子智能体记录'
+    ,'Open tabs': '打开的标签页'
+    ,'Open to the side': '在侧边打开'
+    ,'Other artifacts': '其他产物'
+    ,'Other project': '其他项目'
+    ,'Other projects': '其他项目'
+    ,'Permission details': '权限详情'
+    ,'Project:': '项目：'
+    ,'Publish skill': '发布技能'
+    ,'Remote files': '远程文件'
+    ,'Rename artifact': '重命名产物'
+    ,'Research': '科研'
+    ,'Research preview': '科研预览'
+    ,'Retry builds': '重试构建'
+    ,'Retrying': '正在重试'
+    ,'Reviewer model': '审查模型'
+    ,'Run Python code?': '运行 Python 代码？'
+    ,'Run R code?': '运行 R 代码？'
+    ,'Run a shell command?': '运行 Shell 命令？'
+    ,'Running a tool': '正在运行工具'
+    ,'Running in background': '正在后台运行'
+    ,'Same as main model': '与主模型相同'
+    ,'Save and continue': '保存并继续'
+    ,'Save anyway': '仍然保存'
+    ,'Save as skill': '保存为技能'
+    ,'Save image': '保存图片'
+    ,'Save key': '保存密钥'
+    ,'Search specialists': '搜索专家'
+    ,'Search tools': '搜索工具'
+    ,'Select model': '选择模型'
+    ,'Send a message to interrupt': '发送消息以中断'
+    ,'Send feedback': '发送反馈'
+    ,'Sending message': '正在发送消息'
+    ,'Session actions': '会话操作'
+    ,'Session deleted': '会话已删除'
+    ,'Session failed': '会话失败'
+    ,'Session on hold': '会话已暂停'
+    ,'Session options': '会话选项'
+    ,'Session preview': '会话预览'
+    ,'Session:': '会话：'
+    ,'Side chat': '侧边聊天'
+    ,'Sign in again to continue.': '请重新登录以继续。'
+    ,'Sign in with Claude.ai': '使用 Claude.ai 登录'
+    ,'Sign in with a different account': '使用其他账户登录'
+    ,'Skill suggestions': '技能建议'
+    ,'Skills you added from GitHub': '从 GitHub 添加的技能'
+    ,'Stop & restart': '停止并重启'
+    ,'Stop cell': '停止单元格'
+    ,'Stop dictation': '停止听写'
+    ,'Stopped by you': '已由你停止'
+    ,'Subagent model': '子智能体模型'
+    ,'This project': '此项目'
+    ,'This session': '此会话'
+    ,'This session\'s model': '此会话的模型'
+    ,'Unknown connector': '未知连接器'
+  }));
+
+  const skip = new Set(['SCRIPT', 'STYLE', 'CODE', 'PRE', 'TEXTAREA', 'KBD', 'SAMP']);
+  const translate = value => exact.get(value) || value;
+  const translateText = node => {
+    const parent = node.parentElement;
+    if (!parent || skip.has(parent.tagName) || parent.closest('[contenteditable="true"]')) return;
+    const value = node.nodeValue || '';
+    const match = value.match(/^(\s*)(.*?)(\s*)$/s);
+    if (!match || !match[2]) return;
+    const translated = translate(match[2]);
+    if (translated !== match[2]) node.nodeValue = match[1] + translated + match[3];
+  };
+  const translateAttributes = element => {
+    for (const attr of ['placeholder', 'title', 'aria-label', 'data-tooltip-content']) {
+      if (element.hasAttribute(attr)) {
+        const value = element.getAttribute(attr);
+        const translated = translate(value);
+        if (translated !== value) element.setAttribute(attr, translated);
+      }
+    }
+  };
+  const translateElement = element => {
+    if (!(element instanceof Element) || skip.has(element.tagName)) return;
+    translateAttributes(element);
+    for (const child of element.querySelectorAll('[placeholder], [title], [aria-label], [data-tooltip-content]')) {
+      translateAttributes(child);
+    }
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) translateText(node);
+  };
+  translateElement(document.body);
+  new MutationObserver(records => {
+    for (const record of records) {
+      if (record.type === 'characterData') translateText(record.target);
+      for (const node of record.addedNodes) {
+        if (node.nodeType === Node.TEXT_NODE) translateText(node);
+        else translateElement(node);
+      }
+      if (record.type === 'attributes') translateElement(record.target);
+    }
+  }).observe(document.documentElement, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['placeholder', 'title', 'aria-label', 'data-tooltip-content']
+  });
+})();
+"#;
 const KEY_NAMES: [&str; 4] = [
     "ANTHROPIC_API_KEY_ENCRYPTION_KEY",
     "OAUTH_ENCRYPTION_KEY",
@@ -612,6 +973,343 @@ fn load_runtime() -> Option<RuntimeRecord> {
     runtime_is_current(&runtime).then_some(runtime)
 }
 
+fn read_u32_le(bytes: &[u8], offset: usize) -> Result<u32, String> {
+    let value = bytes
+        .get(offset..offset + 4)
+        .ok_or("Science runtime 结构越界")?;
+    Ok(u32::from_le_bytes(value.try_into().unwrap()))
+}
+
+fn read_u64_le(bytes: &[u8], offset: usize) -> Result<u64, String> {
+    let value = bytes
+        .get(offset..offset + 8)
+        .ok_or("Science runtime 结构越界")?;
+    Ok(u64::from_le_bytes(value.try_into().unwrap()))
+}
+
+fn macho_name_matches(bytes: &[u8], offset: usize, expected: &[u8]) -> bool {
+    bytes
+        .get(offset..offset + 16)
+        .and_then(|name| name.split(|byte| *byte == 0).next())
+        == Some(expected)
+}
+
+fn bun_payload_from_macho(bytes: &[u8]) -> Result<&[u8], String> {
+    if read_u32_le(bytes, 0)? != 0xfeed_facf {
+        return Err("Claude Science runtime 不是受支持的 64 位 Mach-O".into());
+    }
+    let command_count = read_u32_le(bytes, 16)? as usize;
+    let commands_size = read_u32_le(bytes, 20)? as usize;
+    let commands_end = 32usize
+        .checked_add(commands_size)
+        .filter(|end| *end <= bytes.len())
+        .ok_or("Claude Science Mach-O load commands 越界")?;
+    let mut command_offset = 32usize;
+
+    for _ in 0..command_count {
+        let command = read_u32_le(bytes, command_offset)?;
+        let command_size = read_u32_le(bytes, command_offset + 4)? as usize;
+        let command_end = command_offset
+            .checked_add(command_size)
+            .filter(|end| *end <= commands_end && command_size >= 8)
+            .ok_or("Claude Science Mach-O load command 无效")?;
+        if command == 0x19 && command_size >= 72 {
+            let section_count = read_u32_le(bytes, command_offset + 64)? as usize;
+            let sections_size = section_count
+                .checked_mul(80)
+                .and_then(|size| 72usize.checked_add(size))
+                .filter(|size| *size <= command_size)
+                .ok_or("Claude Science Mach-O section 表无效")?;
+            let _ = sections_size;
+            if macho_name_matches(bytes, command_offset + 8, b"__BUN") {
+                for index in 0..section_count {
+                    let section = command_offset + 72 + index * 80;
+                    if macho_name_matches(bytes, section, b"__bun")
+                        && macho_name_matches(bytes, section + 16, b"__BUN")
+                    {
+                        let section_size = usize::try_from(read_u64_le(bytes, section + 40)?)
+                            .map_err(|_| "Claude Science __bun section 过大")?;
+                        let section_offset = read_u32_le(bytes, section + 48)? as usize;
+                        let section_bytes = bytes
+                            .get(section_offset..section_offset.saturating_add(section_size))
+                            .ok_or("Claude Science __bun section 越界")?;
+                        let payload_size = usize::try_from(read_u64_le(section_bytes, 0)?)
+                            .map_err(|_| "Claude Science Bun payload 过大")?;
+                        return section_bytes
+                            .get(8..8usize.saturating_add(payload_size))
+                            .ok_or_else(|| "Claude Science Bun payload 越界".into());
+                    }
+                }
+            }
+        }
+        command_offset = command_end;
+    }
+    Err("Claude Science runtime 不包含 __BUN/__bun 资源".into())
+}
+
+fn bun_string<'a>(payload: &'a [u8], offset: u32, length: u32) -> Result<&'a [u8], String> {
+    let start = offset as usize;
+    let end = start
+        .checked_add(length as usize)
+        .filter(|end| *end <= payload.len())
+        .ok_or("Claude Science Bun 字符串指针越界")?;
+    Ok(&payload[start..end])
+}
+
+fn science_assets_archive(payload: &[u8]) -> Result<&[u8], String> {
+    const OFFSETS_SIZE: usize = 32;
+    const MODULE_SIZE: usize = 52;
+    if payload.len() < OFFSETS_SIZE + BUN_TRAILER.len() || !payload.ends_with(BUN_TRAILER) {
+        return Err("Claude Science Bun payload trailer 无效".into());
+    }
+    let offsets_start = payload.len() - OFFSETS_SIZE - BUN_TRAILER.len();
+    let byte_count = usize::try_from(read_u64_le(payload, offsets_start)?)
+        .map_err(|_| "Claude Science Bun payload byte count 过大")?;
+    if byte_count > offsets_start {
+        return Err("Claude Science Bun payload byte count 越界".into());
+    }
+    let modules_offset = read_u32_le(payload, offsets_start + 8)? as usize;
+    let modules_length = read_u32_le(payload, offsets_start + 12)? as usize;
+    if modules_length == 0 || modules_length % MODULE_SIZE != 0 {
+        return Err("Claude Science Bun module 表长度无效".into());
+    }
+    let modules = payload
+        .get(modules_offset..modules_offset.saturating_add(modules_length))
+        .filter(|_| modules_offset.saturating_add(modules_length) <= byte_count)
+        .ok_or("Claude Science Bun module 表越界")?;
+    let mut archive = None;
+    for module in modules.chunks_exact(MODULE_SIZE) {
+        let name = bun_string(payload, read_u32_le(module, 0)?, read_u32_le(module, 4)?)?;
+        if name.starts_with(b"/$bunfs/root/assets.tar-") && name.ends_with(b".gz") {
+            if archive.is_some() {
+                return Err("Claude Science runtime 包含多个 assets archive".into());
+            }
+            let contents = bun_string(payload, read_u32_le(module, 8)?, read_u32_le(module, 12)?)?;
+            if !contents.starts_with(&[0x1f, 0x8b, 0x08]) {
+                return Err("Claude Science assets archive 不是 gzip".into());
+            }
+            archive = Some(contents);
+        }
+    }
+    archive.ok_or_else(|| "Claude Science runtime 不包含 assets.tar-*.gz".into())
+}
+
+fn safe_archive_path(path: &Path) -> Result<PathBuf, String> {
+    let mut relative = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::Normal(value) => relative.push(value),
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(format!("拒绝解包不安全路径：{}", path.display()));
+            }
+        }
+    }
+    if relative.as_os_str().is_empty() {
+        return Err("拒绝解包空路径".into());
+    }
+    Ok(relative)
+}
+
+fn validate_archive_symlink_target(link_path: &Path, target: &Path) -> Result<(), String> {
+    let mut resolved = link_path
+        .parent()
+        .map(|path| {
+            path.components()
+                .filter_map(|component| match component {
+                    Component::Normal(value) => Some(value.to_os_string()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    for component in target.components() {
+        match component {
+            Component::CurDir => {}
+            Component::Normal(value) => resolved.push(value.to_os_string()),
+            Component::ParentDir => {
+                if resolved.pop().is_none() {
+                    return Err(format!(
+                        "拒绝解包逃逸资源根的符号链接：{} -> {}",
+                        link_path.display(),
+                        target.display()
+                    ));
+                }
+            }
+            Component::RootDir | Component::Prefix(_) => {
+                return Err(format!(
+                    "拒绝解包绝对符号链接：{} -> {}",
+                    link_path.display(),
+                    target.display()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn unpack_science_assets(archive: &[u8], destination: &Path) -> Result<(), String> {
+    let decoder = GzDecoder::new(Cursor::new(archive));
+    let mut archive = tar::Archive::new(decoder);
+    let entries = archive
+        .entries()
+        .map_err(|e| format!("读取 Claude Science assets archive 失败：{e}"))?;
+    for entry in entries {
+        let mut entry = entry.map_err(|e| format!("读取 Claude Science asset 失败：{e}"))?;
+        let entry_type = entry.header().entry_type();
+        let entry_path = entry
+            .path()
+            .map_err(|e| format!("读取 Claude Science asset 路径失败：{e}"))?;
+        if entry_type.is_dir()
+            && entry_path
+                .components()
+                .all(|item| item == Component::CurDir)
+        {
+            continue;
+        }
+        let relative = safe_archive_path(&entry_path)?;
+        let target = destination.join(&relative);
+        if entry_type.is_dir() {
+            ensure_private_dir(&target)?;
+            continue;
+        }
+        if entry_type.is_symlink() {
+            let link_name = entry
+                .link_name()
+                .map_err(|e| format!("读取 Science asset 符号链接失败：{e}"))?
+                .ok_or("Science asset 符号链接缺少目标")?;
+            validate_archive_symlink_target(&relative, &link_name)?;
+            let parent = target.parent().ok_or("Science asset 符号链接缺少父目录")?;
+            ensure_private_dir(parent)?;
+            if target.exists() || std::fs::symlink_metadata(&target).is_ok() {
+                return Err(format!("Science asset 路径重复：{}", target.display()));
+            }
+            std::os::unix::fs::symlink(&link_name, &target)
+                .map_err(|e| format!("创建 Science asset 符号链接失败：{e}"))?;
+            continue;
+        }
+        if !entry_type.is_file() {
+            return Err(format!(
+                "拒绝解包非普通 Science asset：{}",
+                target.display()
+            ));
+        }
+        let parent = target.parent().ok_or("Science asset 缺少父目录")?;
+        ensure_private_dir(parent)?;
+        if target.exists() {
+            return Err(format!("Science asset 路径重复：{}", target.display()));
+        }
+        let executable = entry.header().mode().unwrap_or(0) & 0o111 != 0;
+        let mut output = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(if executable { 0o700 } else { 0o600 })
+            .open(&target)
+            .map_err(|e| format!("创建 Science asset 失败：{e}"))?;
+        std::io::copy(&mut entry, &mut output)
+            .map_err(|e| format!("写入 Science asset 失败：{e}"))?;
+        output
+            .sync_all()
+            .map_err(|e| format!("持久化 Science asset 失败：{e}"))?;
+    }
+    Ok(())
+}
+
+fn inject_science_zh_patch(html: &str) -> Result<String, String> {
+    if html.contains(SCIENCE_ZH_PATCH_SENTINEL) {
+        return Ok(html.to_string());
+    }
+    let head = html
+        .rfind("</head>")
+        .ok_or("Claude Science Web UI 缺少 </head>")?;
+    if !html.contains("</body>") {
+        return Err("Claude Science Web UI 缺少 </body>".into());
+    }
+    let mut output = String::with_capacity(html.len() + SCIENCE_ZH_PATCH_TAG.len() + 1);
+    output.push_str(&html[..head]);
+    output.push_str(SCIENCE_ZH_PATCH_TAG);
+    output.push('\n');
+    output.push_str(&html[head..]);
+    Ok(output)
+}
+
+fn patched_assets_marker(runtime: &RuntimeRecord) -> String {
+    format!(
+        "patch={SCIENCE_ZH_PATCH_VERSION}\nruntime_sha256={}\nruntime_version={}\n",
+        runtime.sha256, runtime.version
+    )
+}
+
+fn validate_patched_assets(path: &Path, marker: &str) -> bool {
+    if path_contains_symlink(path) {
+        return false;
+    }
+    std::fs::read_to_string(path.join(".417switch-patch")).is_ok_and(|value| value == marker)
+        && std::fs::read_to_string(path.join("web-dist/index.html"))
+            .is_ok_and(|value| value.contains(SCIENCE_ZH_PATCH_SENTINEL))
+        && std::fs::read_to_string(path.join(SCIENCE_ZH_PATCH_ASSET))
+            .is_ok_and(|value| value.contains(SCIENCE_ZH_PATCH_SENTINEL))
+}
+
+fn prepare_patched_science_assets(
+    runtime: &RuntimeRecord,
+    cache_root: &Path,
+) -> Result<PathBuf, String> {
+    if !runtime_is_current(runtime) {
+        return Err("Science runtime 在提取中文资源前发生变化".into());
+    }
+    ensure_private_dir(cache_root)?;
+    let destination = cache_root.join(format!("{}-{SCIENCE_ZH_PATCH_VERSION}", runtime.sha256));
+    let marker = patched_assets_marker(runtime);
+    if validate_patched_assets(&destination, &marker) {
+        return Ok(destination);
+    }
+    if destination.exists() {
+        return Err("Claude Science 中文资源缓存已存在但校验失败；请删除后重试".into());
+    }
+
+    let runtime_bytes = validate_executable(
+        &runtime.path,
+        !matches!(runtime.source, RuntimeSource::InstalledApp),
+    )?;
+    if sha256(&runtime_bytes) != runtime.sha256 {
+        return Err("Science runtime 在读取中文资源时发生变化".into());
+    }
+    let payload = bun_payload_from_macho(&runtime_bytes)?;
+    let archive = science_assets_archive(payload)?;
+    let temp = tempfile::Builder::new()
+        .prefix(".science-assets-")
+        .tempdir_in(&cache_root)
+        .map_err(|e| format!("创建 Science assets 临时目录失败：{e}"))?;
+    unpack_science_assets(archive, temp.path())?;
+    let index_path = temp.path().join("web-dist/index.html");
+    let index = std::fs::read_to_string(&index_path)
+        .map_err(|e| format!("读取 Claude Science Web UI 失败：{e}"))?;
+    let patched = inject_science_zh_patch(&index)?;
+    safe_write(&index_path, patched.as_bytes(), 0o600)?;
+    safe_write(
+        &temp.path().join(SCIENCE_ZH_PATCH_ASSET),
+        SCIENCE_ZH_PATCH_SCRIPT.as_bytes(),
+        0o600,
+    )?;
+    safe_write(
+        &temp.path().join(".417switch-patch"),
+        marker.as_bytes(),
+        0o600,
+    )?;
+    let temp_path = temp.keep();
+    std::fs::rename(&temp_path, &destination)
+        .map_err(|e| format!("提交 Claude Science 中文资源失败：{e}"))?;
+    if !validate_patched_assets(&destination, &marker) {
+        return Err("Claude Science 中文资源提交后校验失败".into());
+    }
+    Ok(destination)
+}
+
+fn patched_science_assets_root(runtime: &RuntimeRecord) -> Result<PathBuf, String> {
+    prepare_patched_science_assets(runtime, &science_root().join("runtime-assets"))
+}
+
 fn port_accepts_tcp(port: u16) -> bool {
     TcpStream::connect_timeout(
         &SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port),
@@ -1127,6 +1825,26 @@ fn apply_provider_model_env(command: &mut Command, provider: &Provider) {
     }
 }
 
+fn apply_science_serve_args(command: &mut Command, assets_root: &Path) {
+    command
+        .arg("serve")
+        .arg("--data-dir")
+        .arg(sandbox_data_dir())
+        .arg("--config")
+        .arg(sandbox_config_path())
+        .arg("--host")
+        .arg("127.0.0.1")
+        .arg("--port")
+        .arg(SCIENCE_PORT.to_string())
+        .arg("--sandbox-port")
+        .arg(SCIENCE_PREVIEW_PORT.to_string())
+        .arg("--assets-root")
+        .arg(assets_root)
+        .arg("--no-browser")
+        .arg("--no-auto-update")
+        .arg("--detached");
+}
+
 pub fn model_list_response(provider: &Provider) -> Value {
     let entries = provider_model_entries(provider);
     let first_id = entries.first().map(|(id, _)| *id);
@@ -1251,27 +1969,15 @@ pub async fn start(app: &tauri::AppHandle, state: &AppState) -> Result<ScienceSt
     }
 
     let runtime = select_runtime()?;
+    let assets_root = patched_science_assets_root(&runtime)?;
     let host_home = real_home_dir()?;
     ensure_virtual_login()?;
     ensure_private_dir(&sandbox_data_dir())?;
     remove_temporary_host_browse_grants()?;
 
     let mut command = Command::new(&runtime.path);
+    apply_science_serve_args(&mut command, &assets_root);
     command
-        .arg("serve")
-        .arg("--data-dir")
-        .arg(sandbox_data_dir())
-        .arg("--config")
-        .arg(sandbox_config_path())
-        .arg("--host")
-        .arg("127.0.0.1")
-        .arg("--port")
-        .arg(SCIENCE_PORT.to_string())
-        .arg("--sandbox-port")
-        .arg(SCIENCE_PREVIEW_PORT.to_string())
-        .arg("--no-browser")
-        .arg("--no-auto-update")
-        .arg("--detached")
         .env("HOME", host_home)
         .env("ANTHROPIC_BASE_URL", &proxy_base)
         .env("NO_PROXY", "127.0.0.1,localhost,::1")
@@ -1441,12 +2147,211 @@ pub async fn stop() -> Result<(), String> {
 mod tests {
     use super::*;
 
+    fn put_u32(bytes: &mut [u8], offset: usize, value: u32) {
+        bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    }
+
+    fn put_u64(bytes: &mut [u8], offset: usize, value: u64) {
+        bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+    }
+
+    fn test_assets_archive() -> Vec<u8> {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+
+        let encoder = GzEncoder::new(Vec::new(), Compression::fast());
+        let mut archive = tar::Builder::new(encoder);
+        let html =
+            b"<!doctype html><html><head></head><body><button>Settings</button></body></html>";
+        let mut header = tar::Header::new_gnu();
+        header.set_size(html.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, "web-dist/index.html", &html[..])
+            .unwrap();
+        archive.into_inner().unwrap().finish().unwrap()
+    }
+
+    fn test_bun_payload(assets: &[u8]) -> Vec<u8> {
+        let name = b"/$bunfs/root/assets.tar-test.gz";
+        let mut payload = Vec::new();
+        let name_offset = payload.len() as u32;
+        payload.extend_from_slice(name);
+        let contents_offset = payload.len() as u32;
+        payload.extend_from_slice(assets);
+        let modules_offset = payload.len() as u32;
+        let mut module = [0u8; 52];
+        put_u32(&mut module, 0, name_offset);
+        put_u32(&mut module, 4, name.len() as u32);
+        put_u32(&mut module, 8, contents_offset);
+        put_u32(&mut module, 12, assets.len() as u32);
+        payload.extend_from_slice(&module);
+        let byte_count = payload.len() as u64;
+        let mut offsets = [0u8; 32];
+        put_u64(&mut offsets, 0, byte_count);
+        put_u32(&mut offsets, 8, modules_offset);
+        put_u32(&mut offsets, 12, module.len() as u32);
+        payload.extend_from_slice(&offsets);
+        payload.extend_from_slice(BUN_TRAILER);
+        payload
+    }
+
+    fn test_macho(payload: &[u8]) -> Vec<u8> {
+        let section_offset = 32 + 72 + 80;
+        let section_size = 8 + payload.len();
+        let mut bytes = vec![0u8; section_offset + section_size];
+        put_u32(&mut bytes, 0, 0xfeed_facf);
+        put_u32(&mut bytes, 16, 1);
+        put_u32(&mut bytes, 20, 152);
+        put_u32(&mut bytes, 32, 0x19);
+        put_u32(&mut bytes, 36, 152);
+        bytes[40..45].copy_from_slice(b"__BUN");
+        put_u32(&mut bytes, 96, 1);
+        bytes[104..109].copy_from_slice(b"__bun");
+        bytes[120..125].copy_from_slice(b"__BUN");
+        put_u64(&mut bytes, 144, section_size as u64);
+        put_u32(&mut bytes, 152, section_offset as u32);
+        put_u64(&mut bytes, section_offset, payload.len() as u64);
+        bytes[section_offset + 8..].copy_from_slice(payload);
+        bytes
+    }
+
     #[test]
     fn extracts_first_http_url() {
         assert_eq!(
             first_http_url("note\nopen https://127.0.0.1:15890/path next"),
             Some("https://127.0.0.1:15890/path".into())
         );
+    }
+
+    #[test]
+    fn extracts_assets_archive_from_bun_macho_section() {
+        let assets = test_assets_archive();
+        let macho = test_macho(&test_bun_payload(&assets));
+        let payload = bun_payload_from_macho(&macho).unwrap();
+        assert_eq!(science_assets_archive(payload).unwrap(), assets);
+    }
+
+    #[test]
+    fn rejects_corrupt_bun_payload() {
+        let mut payload = test_bun_payload(&[0x1f, 0x8b, 0x08, 0]);
+        payload.pop();
+        assert!(science_assets_archive(&payload).is_err());
+        assert!(bun_payload_from_macho(b"not a macho").is_err());
+    }
+
+    #[test]
+    fn rejects_archive_path_traversal() {
+        for path in ["../escape", "/absolute", "folder/../../escape"] {
+            assert!(safe_archive_path(Path::new(path)).is_err(), "{path}");
+        }
+        assert_eq!(
+            safe_archive_path(Path::new("./web-dist/index.html")).unwrap(),
+            PathBuf::from("web-dist/index.html")
+        );
+        assert!(validate_archive_symlink_target(
+            Path::new("agents/operon/.claude/skills/example"),
+            Path::new("../../../../skills/example")
+        )
+        .is_ok());
+        assert!(validate_archive_symlink_target(
+            Path::new("agents/link"),
+            Path::new("../../outside")
+        )
+        .is_err());
+        assert!(
+            validate_archive_symlink_target(Path::new("agents/link"), Path::new("/tmp/out"))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn chinese_html_patch_is_idempotent_and_requires_complete_document() {
+        let html = "<html><head></head><body>Settings</body></html>";
+        let once = inject_science_zh_patch(html).unwrap();
+        let twice = inject_science_zh_patch(&once).unwrap();
+        assert_eq!(once, twice);
+        assert_eq!(once.matches(SCIENCE_ZH_PATCH_SENTINEL).count(), 1);
+        assert!(once.find(SCIENCE_ZH_PATCH_SENTINEL).unwrap() < once.find("</head>").unwrap());
+        assert!(inject_science_zh_patch("<html><body></body></html>").is_err());
+        assert!(inject_science_zh_patch("<html><head></head></html>").is_err());
+    }
+
+    #[test]
+    fn patched_assets_cache_hits_and_runtime_hash_changes_rebuild() {
+        let temp = tempfile::tempdir_in("/private/tmp").unwrap();
+        let runtime_path = temp.path().join("claude-science");
+        let assets = test_assets_archive();
+        let first_bytes = test_macho(&test_bun_payload(&assets));
+        std::fs::write(&runtime_path, &first_bytes).unwrap();
+        std::fs::set_permissions(&runtime_path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let mut runtime = RuntimeRecord {
+            path: runtime_path.clone(),
+            source: RuntimeSource::Explicit,
+            version: "test".into(),
+            sha256: sha256(&first_bytes),
+        };
+        let cache = temp.path().join("cache");
+        let first = prepare_patched_science_assets(&runtime, &cache).unwrap();
+        let second = prepare_patched_science_assets(&runtime, &cache).unwrap();
+        assert_eq!(first, second);
+        assert!(std::fs::read_to_string(first.join("web-dist/index.html"))
+            .unwrap()
+            .contains(SCIENCE_ZH_PATCH_SENTINEL));
+        assert!(std::fs::read_to_string(first.join(SCIENCE_ZH_PATCH_ASSET))
+            .unwrap()
+            .contains(SCIENCE_ZH_PATCH_SENTINEL));
+
+        let mut second_assets = test_assets_archive();
+        second_assets.push(0);
+        let second_bytes = test_macho(&test_bun_payload(&second_assets));
+        std::fs::write(&runtime_path, &second_bytes).unwrap();
+        runtime.sha256 = sha256(&second_bytes);
+        let rebuilt = prepare_patched_science_assets(&runtime, &cache).unwrap();
+        assert_ne!(first, rebuilt);
+    }
+
+    #[test]
+    fn science_serve_command_uses_patched_assets_root() {
+        let assets = Path::new("/tmp/417switch-science-assets-test");
+        let mut command = Command::new("claude-science");
+        apply_science_serve_args(&mut command, assets);
+        let args = command
+            .get_args()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let position = args
+            .iter()
+            .position(|value| value == "--assets-root")
+            .unwrap();
+        assert_eq!(args.get(position + 1).map(String::as_str), assets.to_str());
+    }
+
+    #[test]
+    #[ignore = "requires locally installed Claude Science"]
+    fn extracts_and_patches_installed_science_assets() {
+        let path = PathBuf::from(OFFICIAL_APP_BIN);
+        let bytes = validate_executable(&path, false).unwrap();
+        let runtime = RuntimeRecord {
+            path,
+            source: RuntimeSource::InstalledApp,
+            version: "local-integration-test".into(),
+            sha256: sha256(&bytes),
+        };
+        let temp = tempfile::tempdir_in("/private/tmp").unwrap();
+        let patched = prepare_patched_science_assets(&runtime, temp.path()).unwrap();
+        let html = std::fs::read_to_string(patched.join("web-dist/index.html")).unwrap();
+        assert!(html.contains(SCIENCE_ZH_PATCH_SENTINEL));
+        assert!(patched.join(SCIENCE_ZH_PATCH_ASSET).is_file());
+        assert!(patched.join("drizzle/sqlite/meta/_journal.json").is_file());
+        assert!(patched
+            .join("agents/operon/.claude/skills/customize")
+            .is_symlink());
+        if std::env::var_os("CC_SWITCH_KEEP_SCIENCE_TEST_ASSETS").is_some() {
+            eprintln!("SCIENCE_TEST_ASSETS={}", patched.display());
+            let _ = temp.keep();
+        }
     }
 
     #[test]

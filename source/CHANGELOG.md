@@ -5,6 +5,16 @@ All notable changes to CC Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.18.4] - 2026-07-29
+
+### Added
+
+- Claude Science now receives a Simplified Chinese interface patch when launched through 417Switch. The patch translates common labels, menus, buttons, placeholders, titles, and accessibility labels, and keeps dynamically rendered UI translated without modifying code blocks, editable content, or user data.
+
+### Changed
+
+- 417Switch securely extracts Claude Science's bundled web assets into a runtime-versioned cache and launches Science with the patched asset root. Archive paths and links are validated to prevent extraction outside the cache, while the injected same-origin translation script remains compatible with Science's content security policy.
+
 ## [3.18.3] - 2026-07-29
 
 ### Fixed
