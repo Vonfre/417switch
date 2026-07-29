@@ -8,6 +8,7 @@
 
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
+use aho_corasick::AhoCorasick;
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
 use flate2::read::GzDecoder;
@@ -41,16 +42,16 @@ const HKDF_INFO: &[u8] = b"operon:aes-256-gcm:oauth";
 const AAD: &[u8] = b"v2:oauth";
 const MODELS_CREATED_AT: &str = "2026-01-01T00:00:00Z";
 const SCIENCE_LAUNCH_MODE_ZH: &str =
-    "real-home-explicit-config-science-provider-zh-cn-v6-static-auto-update";
+    "real-home-explicit-config-science-provider-zh-cn-v7-complete-settings-auto-update";
 const SCIENCE_LAUNCH_MODE_ORIGINAL: &str =
     "real-home-explicit-config-science-provider-original-v1-auto-update";
-const SCIENCE_ZH_PATCH_VERSION: &str = "zh-cn-v4";
+const SCIENCE_ZH_PATCH_VERSION: &str = "zh-cn-v5";
 const BUN_TRAILER: &[u8] = b"\n---- Bun! ----\n";
-const SCIENCE_ZH_PATCH_SENTINEL: &str = "417switch-science-zh-cn-v4";
-const SCIENCE_ZH_PATCH_ASSET: &str = "web-dist/assets/417switch-zh-cn-v4.js";
-const SCIENCE_ZH_PATCH_TAG: &str = r#"<script defer data-417switch-science-zh-cn-v4 src="./assets/417switch-zh-cn-v4.js"></script>"#;
+const SCIENCE_ZH_PATCH_SENTINEL: &str = "417switch-science-zh-cn-v5";
+const SCIENCE_ZH_PATCH_ASSET: &str = "web-dist/assets/417switch-zh-cn-v5.js";
+const SCIENCE_ZH_PATCH_TAG: &str = r#"<script defer data-417switch-science-zh-cn-v5 src="./assets/417switch-zh-cn-v5.js"></script>"#;
 const SCIENCE_ZH_CATALOG: &str = include_str!("science_zh_cn.json");
-const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v4
+const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v5
 (() => {
   'use strict';
   if (document.documentElement.dataset.switch417ScienceZhCn) return;
@@ -462,6 +463,7 @@ const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v4
     ,'Local command': '本地命令'
     ,'Run a local MCP server on this machine': '在此电脑上运行本地 MCP 服务器'
   }));
+  for (const [key, value] of Object.entries(__417SWITCH_ZH_CATALOG__)) exact.set(key, value);
 
   const skip = new Set(['SCRIPT', 'STYLE', 'CODE', 'PRE', 'TEXTAREA', 'KBD', 'SAMP']);
   const relativeTime = [
@@ -486,10 +488,47 @@ const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v4
     }
     match = value.match(/^(\d+) minutes? ago$/);
     if (match) return `${match[1]} 分钟前`;
+    match = value.match(/^added (\d+)([mhd]) ago$/);
+    if (match) {
+      const unit = {m: '分钟前', h: '小时前', d: '天前'}[match[2]];
+      return `${match[1]} ${unit}添加`;
+    }
+    match = value.match(/^Resets in (\d+) min$/);
+    if (match) return `${match[1]} 分钟后重置`;
+    match = value.match(/^Resets in (\d+) hr(?: (\d+) min)?$/);
+    if (match) return `${match[1]} 小时${match[2] ? ` ${match[2]} 分钟` : ''}后重置`;
+    match = value.match(/^Resets in (\d+) days?$/);
+    if (match) return `${match[1]} 天后重置`;
+    match = value.match(/^Nothing matches "(.+)"\.$/);
+    if (match) return `没有匹配“${match[1]}”的结果。`;
+    match = value.match(/^ID: (.+)$/);
+    if (match) return `ID：${match[1]}`;
+    match = value.match(/^(\d+) of (\d+) categories used$/);
+    if (match) return `已使用 ${match[1]} / ${match[2]} 个分类`;
+    match = value.match(/^Category limit reached \((\d+) of (\d+)\)\./);
+    if (match) return value.replace(match[0], `已达到分类上限（${match[1]} / ${match[2]}）。`);
+    match = value.match(/^Updated (.+) ago$/);
+    if (match) return `${match[1]}前更新`;
+    match = value.match(/^Browse files on (.+?)( \(unavailable\))?$/);
+    if (match) return `浏览 ${match[1]} 上的文件${match[2] ? '（不可用）' : ''}`;
+    match = value.match(/^Files on (.+)$/);
+    if (match) return `${match[1]} 上的文件`;
+    match = value.match(/^Revoke all (.+) grants\?$/);
+    if (match) return `撤销全部${match[1]}授权？`;
+    match = value.match(/^Attached to (\d+) agents?$/);
+    if (match) return `已附加到 ${match[1]} 个专家助手`;
     for (const [prefix, translatedPrefix] of [
       ['Account menu — ', '账户菜单 — '],
       ['Open project ', '打开项目 '],
+      ['Open conversation ', '打开会话 '],
+      ['Open artifact ', '打开产物 '],
       ['View ', '查看 '],
+      ['Edit ', '编辑 '],
+      ['Remove ', '移除 '],
+      ['Stop ', '停止 '],
+      ['Back to ', '返回 '],
+      ['Actions for ', '操作：'],
+      ['Permission for ', '权限：'],
       ['Disable ', '停用 '],
       ['Enable ', '启用 '],
       ['Copy organization ID ', '复制组织 ID ']
@@ -1395,8 +1434,28 @@ fn science_zh_catalog() -> Result<BTreeMap<String, String>, String> {
         .map_err(|e| format!("解析 Claude Science 中文翻译目录失败：{e}"))
 }
 
+fn science_zh_patch_script() -> Result<String, String> {
+    let catalog = science_zh_catalog()?;
+    let catalog = serde_json::to_string(&catalog)
+        .map_err(|e| format!("编码 Claude Science 中文翻译目录失败：{e}"))?;
+    Ok(SCIENCE_ZH_PATCH_SCRIPT.replace("__417SWITCH_ZH_CATALOG__", &catalog))
+}
+
 fn patch_science_javascript_literals(root: &Path) -> Result<usize, String> {
     let catalog = science_zh_catalog()?;
+    let encoded = catalog
+        .iter()
+        .map(|(english, chinese)| {
+            Ok((
+                serde_json::to_string(english)
+                    .map_err(|e| format!("编码 Claude Science 英文文案失败：{e}"))?,
+                serde_json::to_string(chinese)
+                    .map_err(|e| format!("编码 Claude Science 中文文案失败：{e}"))?,
+            ))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let matcher = AhoCorasick::new(encoded.iter().map(|(source, _)| source))
+        .map_err(|e| format!("构建 Claude Science 翻译匹配器失败：{e}"))?;
     let assets_dir = root.join("web-dist/assets");
     let entries = std::fs::read_dir(&assets_dir)
         .map_err(|e| format!("读取 Claude Science assets 目录失败：{e}"))?;
@@ -1414,14 +1473,17 @@ fn patch_science_javascript_literals(root: &Path) -> Result<usize, String> {
             let original = std::fs::read_to_string(&path)
                 .map_err(|e| format!("读取 Claude Science JavaScript asset 失败：{e}"))?;
             let mut patched = original.clone();
-            for (english, chinese) in &catalog {
-                let source = serde_json::to_string(english)
-                    .map_err(|e| format!("编码 Claude Science 英文文案失败：{e}"))?;
-                if patched.contains(&source) {
-                    let target = serde_json::to_string(chinese)
-                        .map_err(|e| format!("编码 Claude Science 中文文案失败：{e}"))?;
-                    let count = patched.matches(&source).count();
-                    patched = patched.replace(&source, &target);
+            let mut matched = matcher
+                .find_iter(&original)
+                .map(|value| value.pattern().as_usize())
+                .collect::<Vec<_>>();
+            matched.sort_unstable();
+            matched.dedup();
+            for index in matched {
+                let (source, target) = &encoded[index];
+                if patched.contains(source) {
+                    let count = patched.matches(source.as_str()).count();
+                    patched = patched.replace(source, target);
                     replacements += count;
                 }
             }
@@ -1491,9 +1553,10 @@ fn prepare_patched_science_assets(
         .map_err(|e| format!("读取 Claude Science Web UI 失败：{e}"))?;
     let patched = inject_science_zh_patch(&index)?;
     safe_write(&index_path, patched.as_bytes(), 0o600)?;
+    let patch_script = science_zh_patch_script()?;
     safe_write(
         &temp.path().join(SCIENCE_ZH_PATCH_ASSET),
-        SCIENCE_ZH_PATCH_SCRIPT.as_bytes(),
+        patch_script.as_bytes(),
         0o600,
     )?;
     safe_write(
@@ -2378,7 +2441,7 @@ mod tests {
         archive
             .append_data(&mut header, "web-dist/index.html", &html[..])
             .unwrap();
-        let javascript = b"const label=\"Settings\";";
+        let javascript = br#"const labels=["Settings","Add specialist","Browse Connectors Directory","No skills yet","Compute providers","Allowed domains","No credentials configured.","Data location","Clear all memories?","Your usage limits","Default model"];"#;
         let mut header = tar::Header::new_gnu();
         header.set_size(javascript.len() as u64);
         header.set_mode(0o644);
@@ -2499,6 +2562,42 @@ mod tests {
         assert!(SCIENCE_ZH_PATCH_SCRIPT.contains("Directory connectors unavailable"));
         assert!(SCIENCE_ZH_PATCH_SCRIPT.contains("Applied as your default for new sessions."));
         assert!(SCIENCE_ZH_PATCH_SCRIPT.contains("Automatic updates are off"));
+        let generated = science_zh_patch_script().unwrap();
+        assert!(!generated.contains("__417SWITCH_ZH_CATALOG__"));
+        assert!(generated.contains("No credentials configured."));
+        assert!(generated.contains("尚未配置凭据。"));
+    }
+
+    #[test]
+    fn science_chinese_catalog_covers_every_settings_page_and_nested_flow() {
+        let catalog = science_zh_catalog().unwrap();
+        for key in [
+            // Capabilities pages and nested editors.
+            "Add specialist",
+            "Browse Connectors Directory",
+            "No skills yet",
+            "Compute providers",
+            "Allowed domains",
+            "No credentials configured.",
+            "Data location",
+            "Clear all memories?",
+            // Workspace pages and their detail views.
+            "Revoke this license acknowledgment?",
+            "Delete cloud credential?",
+            "Your usage limits",
+            "Default model",
+            "Package mirror",
+            // Common nested dialogs.
+            "Discard unsaved details?",
+            "Remove model endpoint",
+            "Enable Modal compute?",
+        ] {
+            assert!(
+                catalog.contains_key(key),
+                "missing Science translation: {key}"
+            );
+        }
+        assert!(catalog.len() >= 650);
     }
 
     #[test]
@@ -2527,8 +2626,28 @@ mod tests {
             .contains(SCIENCE_ZH_PATCH_SENTINEL));
         let javascript =
             std::fs::read_to_string(first.join("web-dist/assets/index-test.js")).unwrap();
-        assert!(javascript.contains("设置"));
-        assert!(!javascript.contains("\"Settings\""));
+        for (english, chinese) in [
+            ("Settings", "设置"),
+            ("Add specialist", "添加专家助手"),
+            ("Browse Connectors Directory", "浏览连接器目录"),
+            ("No skills yet", "还没有技能"),
+            ("Compute providers", "计算服务商"),
+            ("Allowed domains", "允许的域名"),
+            ("No credentials configured.", "尚未配置凭据。"),
+            ("Data location", "数据位置"),
+            ("Clear all memories?", "清除全部记忆？"),
+            ("Your usage limits", "你的用量限制"),
+            ("Default model", "默认模型"),
+        ] {
+            assert!(
+                javascript.contains(chinese),
+                "missing replacement for {english}"
+            );
+            assert!(
+                !javascript.contains(&serde_json::to_string(english).unwrap()),
+                "English literal survived: {english}"
+            );
+        }
 
         let mut second_assets = test_assets_archive();
         second_assets.push(0);
@@ -2595,6 +2714,46 @@ mod tests {
         assert!(patched
             .join("agents/operon/.claude/skills/customize")
             .is_symlink());
+        let mut application_javascript = String::new();
+        for entry in std::fs::read_dir(patched.join("web-dist/assets")).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) == Some("js")
+                && path.file_name().and_then(|value| value.to_str())
+                    != Some(
+                        Path::new(SCIENCE_ZH_PATCH_ASSET)
+                            .file_name()
+                            .unwrap()
+                            .to_str()
+                            .unwrap(),
+                    )
+            {
+                application_javascript.push_str(&std::fs::read_to_string(path).unwrap());
+            }
+        }
+        let catalog = science_zh_catalog().unwrap();
+        for english in [
+            "Add specialist",
+            "Browse Connectors Directory",
+            "No skills yet",
+            "Compute providers",
+            "Allowed domains",
+            "No credentials configured.",
+            "Data location",
+            "Clear all memories?",
+            "Your usage limits",
+            "Default model",
+        ] {
+            let chinese = catalog.get(english).unwrap();
+            assert!(
+                application_javascript.contains(chinese),
+                "real Science assets missed: {english}"
+            );
+            assert!(
+                !application_javascript.contains(&serde_json::to_string(english).unwrap()),
+                "real Science English literal survived: {english}"
+            );
+        }
         if std::env::var_os("CC_SWITCH_KEEP_SCIENCE_TEST_ASSETS").is_some() {
             eprintln!("SCIENCE_TEST_ASSETS={}", patched.display());
             let _ = temp.keep();

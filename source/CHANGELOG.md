@@ -5,6 +5,19 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.18.7] - 2026-07-29
+
+### Changed
+
+- Expanded the Claude Science Simplified Chinese catalog from 113 to more than 800 exact strings, covering every Function and Workspace child page: Specialists, Skills, Connectors, Compute, Network, Permissions, Credentials, Storage, Memory, Usage, and General.
+- Nested editors, detail pages, import flows, SSH and Modal setup, BioNeMo endpoints, cloud credentials, skill publishing, memory categories, package mirrors, and confirmation dialogs now receive the same source-level localization as their parent pages.
+- The runtime translation fallback is generated from the complete catalog and adds dynamic handling for relative times, usage resets, counts, host file labels, grants, and resource-specific action labels.
+
+### Fixed
+
+- Fixed untranslated English remaining after opening concrete Function or Workspace subpages, including placeholders, tooltips, accessibility labels, empty states, validation messages, and destructive-action confirmations.
+- Added real installed Claude Science asset coverage tests that verify representative English literals from every settings group are removed from application bundles and replaced with Chinese before release.
+
 ## [3.18.6] - 2026-07-29
 
 ### Added
