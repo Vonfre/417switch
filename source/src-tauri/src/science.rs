@@ -42,16 +42,16 @@ const HKDF_INFO: &[u8] = b"operon:aes-256-gcm:oauth";
 const AAD: &[u8] = b"v2:oauth";
 const MODELS_CREATED_AT: &str = "2026-01-01T00:00:00Z";
 const SCIENCE_LAUNCH_MODE_ZH: &str =
-    "real-home-explicit-config-science-provider-zh-cn-v7-complete-settings-auto-update";
+    "real-home-explicit-config-science-provider-zh-cn-v8-agent-errors-auto-update";
 const SCIENCE_LAUNCH_MODE_ORIGINAL: &str =
     "real-home-explicit-config-science-provider-original-v1-auto-update";
-const SCIENCE_ZH_PATCH_VERSION: &str = "zh-cn-v5";
+const SCIENCE_ZH_PATCH_VERSION: &str = "zh-cn-v6";
 const BUN_TRAILER: &[u8] = b"\n---- Bun! ----\n";
-const SCIENCE_ZH_PATCH_SENTINEL: &str = "417switch-science-zh-cn-v5";
-const SCIENCE_ZH_PATCH_ASSET: &str = "web-dist/assets/417switch-zh-cn-v5.js";
-const SCIENCE_ZH_PATCH_TAG: &str = r#"<script defer data-417switch-science-zh-cn-v5 src="./assets/417switch-zh-cn-v5.js"></script>"#;
+const SCIENCE_ZH_PATCH_SENTINEL: &str = "417switch-science-zh-cn-v6";
+const SCIENCE_ZH_PATCH_ASSET: &str = "web-dist/assets/417switch-zh-cn-v6.js";
+const SCIENCE_ZH_PATCH_TAG: &str = r#"<script defer data-417switch-science-zh-cn-v6 src="./assets/417switch-zh-cn-v6.js"></script>"#;
 const SCIENCE_ZH_CATALOG: &str = include_str!("science_zh_cn.json");
-const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v5
+const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v6
 (() => {
   'use strict';
   if (document.documentElement.dataset.switch417ScienceZhCn) return;
@@ -503,6 +503,8 @@ const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v5
     if (match) return `没有匹配“${match[1]}”的结果。`;
     match = value.match(/^ID: (.+)$/);
     if (match) return `ID：${match[1]}`;
+    match = value.match(/^An error occurred while processing your request\. You can retry your request, or contact us through our help center at help\.openai\.com if the error persists\. Please include the request ID ([A-Za-z0-9-]+) in your message\.$/);
+    if (match) return `处理请求时发生错误。你可以重试；如果问题持续存在，请通过 help.openai.com 联系支持团队，并在消息中附上请求 ID：${match[1]}。`;
     match = value.match(/^(\d+) of (\d+) categories used$/);
     if (match) return `已使用 ${match[1]} / ${match[2]} 个分类`;
     match = value.match(/^Category limit reached \((\d+) of (\d+)\)\./);
@@ -2562,10 +2564,14 @@ mod tests {
         assert!(SCIENCE_ZH_PATCH_SCRIPT.contains("Directory connectors unavailable"));
         assert!(SCIENCE_ZH_PATCH_SCRIPT.contains("Applied as your default for new sessions."));
         assert!(SCIENCE_ZH_PATCH_SCRIPT.contains("Automatic updates are off"));
+        assert!(SCIENCE_ZH_PATCH_SCRIPT.contains("An error occurred while processing your request"));
         let generated = science_zh_patch_script().unwrap();
         assert!(!generated.contains("__417SWITCH_ZH_CATALOG__"));
         assert!(generated.contains("No credentials configured."));
         assert!(generated.contains("尚未配置凭据。"));
+        assert!(generated.contains("Agent Failed"));
+        assert!(generated.contains("智能体运行失败"));
+        assert!(generated.contains("处理请求时发生错误"));
     }
 
     #[test]
@@ -2591,6 +2597,8 @@ mod tests {
             "Discard unsaved details?",
             "Remove model endpoint",
             "Enable Modal compute?",
+            "Agent Failed",
+            "Temporarily unavailable",
         ] {
             assert!(
                 catalog.contains_key(key),

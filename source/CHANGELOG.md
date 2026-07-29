@@ -5,6 +5,13 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.18.8] - 2026-07-29
+
+### Fixed
+
+- Localized Claude Science agent failure banners, temporary-unavailable states, and dynamic OpenAI server-error messages while preserving their request IDs for support.
+- Bumped the managed Chinese asset cache and launch mode so existing installations rebuild the localized assets instead of reusing the v3.18.7 cache after restart.
+
 ## [3.18.7] - 2026-07-29
 
 ### Changed
