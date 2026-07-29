@@ -368,6 +368,8 @@ export interface Settings {
   enableFailoverToggle?: boolean;
   // Whether to show the project profile switcher on the main page header
   showProfileSwitcher?: boolean;
+  // Whether Claude Science starts with the 417Switch Chinese resource patch
+  scienceChinesePatchEnabled?: boolean;
   // Preserve Codex ChatGPT login in auth.json when switching third-party providers
   preserveCodexOfficialAuthOnSwitch?: boolean;
   // Run official Codex under the shared "custom" provider id so future

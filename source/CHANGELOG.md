@@ -1,9 +1,25 @@
 # Changelog
 
-All notable changes to CC Switch will be documented in this file.
+All notable changes to 417Switch will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [3.18.6] - 2026-07-29
+
+### Added
+
+- Settings now includes a Claude Science Chinese patch toggle. It defaults on for existing behavior; turning it off starts Science with its official embedded English assets on the next managed launch.
+
+### Changed
+
+- Claude Science localization now patches exact string literals directly in every extracted JavaScript bundle, so React renders Chinese at source without waiting for DOM mutation. A smaller runtime observer remains for dynamic project names, relative times, and other late-rendered text.
+- Expanded Simplified Chinese coverage for Compute, SSH hosts, cloud providers, model endpoints, directory connector session notices, update controls, and other Settings surfaces.
+- User-visible legacy `CC Switch` branding in the four app locales and Settings fallback text now reads `417Switch`; internal compatibility paths, database names, protocol identifiers, and promo codes remain unchanged.
+
+### Fixed
+
+- The 417Switch title link on the home page, tray menu, and About settings now opens the 417Switch GitHub repository instead of `ccswitch.io`.
 
 ## [3.18.5] - 2026-07-29
 

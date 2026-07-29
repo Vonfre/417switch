@@ -380,6 +380,9 @@ pub struct AppSettings {
     /// Whether to show the project profile switcher on the main page header
     #[serde(default = "default_show_profile_switcher")]
     pub show_profile_switcher: bool,
+    /// Apply the 417Switch Simplified Chinese resource patch to Claude Science.
+    #[serde(default = "default_true")]
+    pub science_chinese_patch_enabled: bool,
     /// Keep Codex ChatGPT login material in auth.json when switching to third-party providers.
     /// Opt-in: defaults to false so third-party switches cleanly overwrite auth.json.
     #[serde(default)]
@@ -521,6 +524,7 @@ impl Default for AppSettings {
             usage_dashboard_refresh_interval_ms: None,
             enable_failover_toggle: false,
             show_profile_switcher: true,
+            science_chinese_patch_enabled: true,
             preserve_codex_official_auth_on_switch: false,
             unify_codex_session_history: false,
             unify_codex_migrate_existing: None,
@@ -1177,5 +1181,16 @@ mod tests {
         .expect("visible apps");
 
         assert!(!visible.is_visible(&AppType::ClaudeDesktop));
+    }
+
+    #[test]
+    fn old_settings_default_science_chinese_patch_enabled() {
+        let mut value = serde_json::to_value(AppSettings::default()).expect("settings value");
+        value
+            .as_object_mut()
+            .expect("settings object")
+            .remove("scienceChinesePatchEnabled");
+        let settings: AppSettings = serde_json::from_value(value).expect("old settings");
+        assert!(settings.science_chinese_patch_enabled);
     }
 }

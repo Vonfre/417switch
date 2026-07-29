@@ -40,13 +40,17 @@ const VIRTUAL_EMAIL: &str = "417switch@localhost.invalid";
 const HKDF_INFO: &[u8] = b"operon:aes-256-gcm:oauth";
 const AAD: &[u8] = b"v2:oauth";
 const MODELS_CREATED_AT: &str = "2026-01-01T00:00:00Z";
-const SCIENCE_LAUNCH_MODE: &str = "real-home-explicit-config-science-provider-zh-cn-v5-auto-update";
-const SCIENCE_ZH_PATCH_VERSION: &str = "zh-cn-v3";
+const SCIENCE_LAUNCH_MODE_ZH: &str =
+    "real-home-explicit-config-science-provider-zh-cn-v6-static-auto-update";
+const SCIENCE_LAUNCH_MODE_ORIGINAL: &str =
+    "real-home-explicit-config-science-provider-original-v1-auto-update";
+const SCIENCE_ZH_PATCH_VERSION: &str = "zh-cn-v4";
 const BUN_TRAILER: &[u8] = b"\n---- Bun! ----\n";
-const SCIENCE_ZH_PATCH_SENTINEL: &str = "417switch-science-zh-cn-v3";
-const SCIENCE_ZH_PATCH_ASSET: &str = "web-dist/assets/417switch-zh-cn-v3.js";
-const SCIENCE_ZH_PATCH_TAG: &str = r#"<script defer data-417switch-science-zh-cn-v3 src="./assets/417switch-zh-cn-v3.js"></script>"#;
-const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v3
+const SCIENCE_ZH_PATCH_SENTINEL: &str = "417switch-science-zh-cn-v4";
+const SCIENCE_ZH_PATCH_ASSET: &str = "web-dist/assets/417switch-zh-cn-v4.js";
+const SCIENCE_ZH_PATCH_TAG: &str = r#"<script defer data-417switch-science-zh-cn-v4 src="./assets/417switch-zh-cn-v4.js"></script>"#;
+const SCIENCE_ZH_CATALOG: &str = include_str!("science_zh_cn.json");
+const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v4
 (() => {
   'use strict';
   if (document.documentElement.dataset.switch417ScienceZhCn) return;
@@ -270,6 +274,15 @@ const SCIENCE_ZH_PATCH_SCRIPT: &str = r#"// 417switch-science-zh-cn-v3
     ,'Messages': '消息'
     ,'Model endpoint': '模型端点'
     ,'Model endpoints': '模型端点'
+    ,'SSH hosts': 'SSH 主机'
+    ,'Add SSH host': '添加 SSH 主机'
+    ,'No SSH hosts yet': '还没有 SSH 主机'
+    ,'Cloud providers': '云服务商'
+    ,'Servers, clusters or job submission nodes from your SSH host lists': '来自 SSH 主机列表的服务器、集群或作业提交节点'
+    ,'Serverless GPUs on your own Modal account — connect in about a minute.': '使用你自己的 Modal 账户运行无服务器 GPU——大约一分钟即可连接。'
+    ,'Scientific models Claude can reach at a local or remote URL': 'Claude 可通过本地或远程 URL 访问的科学模型'
+    ,'Run heavy analysis jobs on your own servers and clusters, or on serverless GPUs using your cloud account. Model endpoints let Claude call scientific models like protein structure predictors.': '在你自己的服务器和集群上运行重型分析任务，也可使用你的云账户调用无服务器 GPU。模型端点可让 Claude 调用蛋白质结构预测等科学模型。'
+    ,'BioNeMo model services — local NIM docker containers, or externally hosted NIM APIs. Each registration asks you individually; disabling stops and removes them all.': 'BioNeMo 模型服务——可使用本地 NIM Docker 容器或外部托管的 NIM API。每次注册都会单独征求你的同意；停用后会停止并移除全部服务。'
     ,'Model unavailable': '模型不可用'
     ,'More models': '更多模型'
     ,'Move session to project': '将会话移至项目'
@@ -631,16 +644,29 @@ fn launch_mode_path() -> PathBuf {
     science_root().join("launch-mode")
 }
 
+fn chinese_patch_enabled() -> bool {
+    crate::settings::get_settings().science_chinese_patch_enabled
+}
+
+fn expected_launch_mode(chinese_patch: bool) -> &'static str {
+    if chinese_patch {
+        SCIENCE_LAUNCH_MODE_ZH
+    } else {
+        SCIENCE_LAUNCH_MODE_ORIGINAL
+    }
+}
+
 fn launch_mode_is_current() -> bool {
+    let expected = expected_launch_mode(chinese_patch_enabled());
     std::fs::read_to_string(launch_mode_path())
-        .map(|value| value.trim() == SCIENCE_LAUNCH_MODE)
+        .map(|value| value.trim() == expected)
         .unwrap_or(false)
 }
 
-fn save_launch_mode() -> Result<(), String> {
+fn save_launch_mode(chinese_patch: bool) -> Result<(), String> {
     safe_write(
         &launch_mode_path(),
-        format!("{SCIENCE_LAUNCH_MODE}\n").as_bytes(),
+        format!("{}\n", expected_launch_mode(chinese_patch)).as_bytes(),
         0o600,
     )
 }
@@ -1364,6 +1390,49 @@ fn inject_science_zh_patch(html: &str) -> Result<String, String> {
     Ok(output)
 }
 
+fn science_zh_catalog() -> Result<BTreeMap<String, String>, String> {
+    serde_json::from_str(SCIENCE_ZH_CATALOG)
+        .map_err(|e| format!("解析 Claude Science 中文翻译目录失败：{e}"))
+}
+
+fn patch_science_javascript_literals(root: &Path) -> Result<usize, String> {
+    let catalog = science_zh_catalog()?;
+    let assets_dir = root.join("web-dist/assets");
+    let entries = std::fs::read_dir(&assets_dir)
+        .map_err(|e| format!("读取 Claude Science assets 目录失败：{e}"))?;
+    let mut replacements = 0usize;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("读取 Claude Science asset 条目失败：{e}"))?;
+        let path = entry.path();
+        if entry
+            .file_type()
+            .map_err(|e| format!("读取 Claude Science asset 类型失败：{e}"))?
+            .is_file()
+            && path.extension().and_then(|value| value.to_str()) == Some("js")
+        {
+            let original = std::fs::read_to_string(&path)
+                .map_err(|e| format!("读取 Claude Science JavaScript asset 失败：{e}"))?;
+            let mut patched = original.clone();
+            for (english, chinese) in &catalog {
+                let source = serde_json::to_string(english)
+                    .map_err(|e| format!("编码 Claude Science 英文文案失败：{e}"))?;
+                if patched.contains(&source) {
+                    let target = serde_json::to_string(chinese)
+                        .map_err(|e| format!("编码 Claude Science 中文文案失败：{e}"))?;
+                    let count = patched.matches(&source).count();
+                    patched = patched.replace(&source, &target);
+                    replacements += count;
+                }
+            }
+            if patched != original {
+                safe_write(&path, patched.as_bytes(), 0o600)?;
+            }
+        }
+    }
+    Ok(replacements)
+}
+
 fn patched_assets_marker(runtime: &RuntimeRecord) -> String {
     format!(
         "patch={SCIENCE_ZH_PATCH_VERSION}\nruntime_sha256={}\nruntime_version={}\n",
@@ -1413,6 +1482,10 @@ fn prepare_patched_science_assets(
         .tempdir_in(&cache_root)
         .map_err(|e| format!("创建 Science assets 临时目录失败：{e}"))?;
     unpack_science_assets(archive, temp.path())?;
+    let static_replacements = patch_science_javascript_literals(temp.path())?;
+    if static_replacements == 0 {
+        return Err("Claude Science 中文资源未命中任何静态文案，拒绝提交空补丁".into());
+    }
     let index_path = temp.path().join("web-dist/index.html");
     let index = std::fs::read_to_string(&index_path)
         .map_err(|e| format!("读取 Claude Science Web UI 失败：{e}"))?;
@@ -1956,7 +2029,7 @@ fn apply_provider_model_env(command: &mut Command, provider: &Provider) {
     }
 }
 
-fn apply_science_serve_args(command: &mut Command, assets_root: &Path) {
+fn apply_science_serve_args(command: &mut Command, assets_root: Option<&Path>) {
     command
         .arg("serve")
         .arg("--data-dir")
@@ -1968,11 +2041,11 @@ fn apply_science_serve_args(command: &mut Command, assets_root: &Path) {
         .arg("--port")
         .arg(SCIENCE_PORT.to_string())
         .arg("--sandbox-port")
-        .arg(SCIENCE_PREVIEW_PORT.to_string())
-        .arg("--assets-root")
-        .arg(assets_root)
-        .arg("--no-browser")
-        .arg("--detached");
+        .arg(SCIENCE_PREVIEW_PORT.to_string());
+    if let Some(assets_root) = assets_root {
+        command.arg("--assets-root").arg(assets_root);
+    }
+    command.arg("--no-browser").arg("--detached");
 }
 
 pub fn model_list_response(provider: &Provider) -> Value {
@@ -2099,14 +2172,19 @@ pub async fn start(app: &tauri::AppHandle, state: &AppState) -> Result<ScienceSt
     }
 
     let runtime = select_runtime()?;
-    let assets_root = patched_science_assets_root(&runtime)?;
+    let chinese_patch = chinese_patch_enabled();
+    let assets_root = if chinese_patch {
+        Some(patched_science_assets_root(&runtime)?)
+    } else {
+        None
+    };
     let host_home = real_home_dir()?;
     ensure_virtual_login()?;
     ensure_private_dir(&sandbox_data_dir())?;
     remove_temporary_host_browse_grants()?;
 
     let mut command = Command::new(&runtime.path);
-    apply_science_serve_args(&mut command, &assets_root);
+    apply_science_serve_args(&mut command, assets_root.as_deref());
     command
         .env("HOME", host_home)
         .env("ANTHROPIC_BASE_URL", &proxy_base)
@@ -2168,7 +2246,7 @@ pub async fn start(app: &tauri::AppHandle, state: &AppState) -> Result<ScienceSt
     if !ready {
         return Err("Claude Science 启动后健康检查超时".into());
     }
-    save_launch_mode()?;
+    save_launch_mode(chinese_patch)?;
     let url = science_url(&runtime)?;
     open_science_surface(app, &url)?;
     Ok(ScienceStartResult {
@@ -2299,6 +2377,18 @@ mod tests {
         header.set_cksum();
         archive
             .append_data(&mut header, "web-dist/index.html", &html[..])
+            .unwrap();
+        let javascript = b"const label=\"Settings\";";
+        let mut header = tar::Header::new_gnu();
+        header.set_size(javascript.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(
+                &mut header,
+                "web-dist/assets/index-test.js",
+                &javascript[..],
+            )
             .unwrap();
         archive.into_inner().unwrap().finish().unwrap()
     }
@@ -2435,6 +2525,10 @@ mod tests {
         assert!(std::fs::read_to_string(first.join(SCIENCE_ZH_PATCH_ASSET))
             .unwrap()
             .contains(SCIENCE_ZH_PATCH_SENTINEL));
+        let javascript =
+            std::fs::read_to_string(first.join("web-dist/assets/index-test.js")).unwrap();
+        assert!(javascript.contains("设置"));
+        assert!(!javascript.contains("\"Settings\""));
 
         let mut second_assets = test_assets_archive();
         second_assets.push(0);
@@ -2449,7 +2543,7 @@ mod tests {
     fn science_serve_command_uses_patched_assets_root_and_allows_auto_updates() {
         let assets = Path::new("/tmp/417switch-science-assets-test");
         let mut command = Command::new("claude-science");
-        apply_science_serve_args(&mut command, assets);
+        apply_science_serve_args(&mut command, Some(assets));
         let args = command
             .get_args()
             .map(|value| value.to_string_lossy().into_owned())
@@ -2460,6 +2554,25 @@ mod tests {
             .unwrap();
         assert_eq!(args.get(position + 1).map(String::as_str), assets.to_str());
         assert!(!args.iter().any(|value| value == "--no-auto-update"));
+    }
+
+    #[test]
+    fn science_serve_command_can_use_original_embedded_assets() {
+        let mut command = Command::new("claude-science");
+        apply_science_serve_args(&mut command, None);
+        let args = command
+            .get_args()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert!(!args.iter().any(|value| value == "--assets-root"));
+        assert!(!args.iter().any(|value| value == "--no-auto-update"));
+    }
+
+    #[test]
+    fn science_launch_mode_tracks_chinese_patch_setting() {
+        assert_ne!(expected_launch_mode(true), expected_launch_mode(false));
+        assert!(expected_launch_mode(true).contains("zh-cn"));
+        assert!(expected_launch_mode(false).contains("original"));
     }
 
     #[test]

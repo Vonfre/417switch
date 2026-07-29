@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { FlaskConical, FolderOpen } from "lucide-react";
+import { FlaskConical, FolderOpen, Languages } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleRow } from "@/components/ui/toggle-row";
 import { cn } from "@/lib/utils";
@@ -107,6 +107,15 @@ export function AppVisibilitySettings({
         description={t("settings.appVisibility.showProfileSwitcherDescription")}
         checked={settings.showProfileSwitcher ?? true}
         onCheckedChange={(value) => onChange({ showProfileSwitcher: value })}
+      />
+      <ToggleRow
+        icon={<Languages className="h-4 w-4 text-sky-500" />}
+        title={t("settings.appVisibility.scienceChinesePatch")}
+        description={t("settings.appVisibility.scienceChinesePatchDescription")}
+        checked={settings.scienceChinesePatchEnabled ?? true}
+        onCheckedChange={(value) =>
+          onChange({ scienceChinesePatchEnabled: value })
+        }
       />
     </section>
   );
