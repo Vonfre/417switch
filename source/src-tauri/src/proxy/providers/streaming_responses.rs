@@ -60,6 +60,25 @@ fn anthropic_error_sse(message: &str, error_type: &str) -> Bytes {
     )
 }
 
+fn log_responses_semantic_failure(event_name: &str, error_type: &str, message: &str) {
+    let normalized = message.to_ascii_lowercase();
+    let class = if normalized.contains("auth_unavailable") {
+        "auth_unavailable"
+    } else if normalized.contains("overloaded") || normalized.contains("service unavailable") {
+        "overloaded"
+    } else if normalized.contains("rate limit") || normalized.contains("too many requests") {
+        "rate_limited"
+    } else if normalized.contains("stream") && normalized.contains("disconnect") {
+        "stream_disconnected"
+    } else {
+        "other"
+    };
+    log::warn!(
+        "[Claude/Responses] upstream semantic failure: event={event_name}, type={error_type}, class={class}, message_chars={}",
+        message.chars().count()
+    );
+}
+
 /// Convert a compatible gateway's non-streaming Responses JSON into a complete
 /// Anthropic SSE lifecycle. This is used when the client requested streaming but
 /// the upstream ignored `stream:true` and returned `application/json`.
@@ -1207,6 +1226,11 @@ pub fn create_anthropic_sse_stream_from_responses<E: std::error::Error + Send + 
                                         &data,
                                         "Responses upstream returned a failed terminal response",
                                     );
+                                    log_responses_semantic_failure(
+                                        event_name,
+                                        &error_type,
+                                        &message,
+                                    );
                                     yield Ok(anthropic_error_sse(&message, &error_type));
                                     terminated = true;
                                     continue;
@@ -1313,6 +1337,11 @@ pub fn create_anthropic_sse_stream_from_responses<E: std::error::Error + Send + 
                                     } else {
                                         "Responses upstream emitted an error event"
                                     },
+                                );
+                                log_responses_semantic_failure(
+                                    event_name,
+                                    &error_type,
+                                    &message,
                                 );
                                 yield Ok(anthropic_error_sse(&message, &error_type));
                                 terminated = true;

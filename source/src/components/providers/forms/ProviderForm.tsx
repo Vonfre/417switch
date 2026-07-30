@@ -369,6 +369,9 @@ function ProviderFormFull({
     });
     setCodexChatReasoning(initialData?.meta?.codexChatReasoning ?? {});
     setPromptCacheRouting(initialData?.meta?.promptCacheRouting ?? "auto");
+    setCodexCompatibleResponses(
+      initialData?.meta?.codexCompatibleResponses ?? false,
+    );
     setCustomUserAgent(initialData?.meta?.customUserAgent ?? "");
     setLocalProxyHeadersOverride(
       formatRequestOverrideObject(
@@ -490,6 +493,10 @@ function ProviderFormFull({
     if (!isClaudeLike) return "anthropic";
     return initialData?.meta?.apiFormat ?? "anthropic";
   });
+  const [codexCompatibleResponses, setCodexCompatibleResponses] =
+    useState<boolean>(
+      () => initialData?.meta?.codexCompatibleResponses ?? false,
+    );
 
   const handleApiFormatChange = useCallback((format: ClaudeApiFormat) => {
     setLocalApiFormat(format);
@@ -1660,6 +1667,13 @@ function ProviderFormFull({
               ? "openai_responses"
               : localCodexApiFormat
             : undefined,
+      codexCompatibleResponses:
+        isClaudeLike &&
+        category !== "official" &&
+        localApiFormat === "openai_responses" &&
+        codexCompatibleResponses
+          ? true
+          : undefined,
       apiKeyField:
         isClaudeLike &&
         category !== "official" &&
@@ -1811,6 +1825,7 @@ function ProviderFormFull({
       // in OpenAI Responses mode and silently builds the wrong route config.
       if (isClaudeLike) {
         setLocalApiFormat("anthropic");
+        setCodexCompatibleResponses(false);
         setLocalApiKeyField("ANTHROPIC_AUTH_TOKEN");
         setLocalIsFullUrl(false);
       }
@@ -1978,6 +1993,7 @@ function ProviderFormFull({
     } else {
       setLocalApiFormat("anthropic");
     }
+    setCodexCompatibleResponses(false);
 
     setLocalApiKeyField(preset.apiKeyField ?? "ANTHROPIC_AUTH_TOKEN");
     setLocalIsFullUrl(false);
@@ -2318,6 +2334,8 @@ function ProviderFormFull({
               speedTestEndpoints={speedTestEndpoints}
               apiFormat={localApiFormat}
               onApiFormatChange={handleApiFormatChange}
+              codexCompatibleResponses={codexCompatibleResponses}
+              onCodexCompatibleResponsesChange={setCodexCompatibleResponses}
               apiKeyField={localApiKeyField}
               onApiKeyFieldChange={handleApiKeyFieldChange}
               isFullUrl={localIsFullUrl}

@@ -1072,6 +1072,8 @@
     "anthropicSmallFastModel": "快速模型",
     "apiFormat": "API 格式",
     "apiFormatHint": "選擇供應商 API 的輸入格式",
+    "codexCompatibleResponses": "Codex-compatible Responses 閘道",
+    "codexCompatibleResponsesHint": "保留目前自訂位址與 Bearer Token，但依官方 Codex 用戶端送出 store、加密 reasoning、工具並行與用戶端識別契約。僅適用於實際由 Codex 帳號池驅動的閘道。",
     "customUserAgent": "自訂 User-Agent",
     "customUserAgentHint": "僅在開啟本地路由/代理接管後生效，會取代轉發至供應商 API 請求中的 User-Agent。",
     "customUserAgentInvalid": "User-Agent 不能包含控制字元（如換行字元），否則將被忽略。",

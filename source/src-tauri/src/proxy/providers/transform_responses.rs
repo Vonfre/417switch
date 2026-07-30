@@ -284,15 +284,16 @@ pub(crate) fn sanitize_anthropic_tool_use_input_json(name: &str, raw: &str) -> S
 /// Anthropic 请求 → OpenAI Responses 请求
 ///
 /// `cache_key`: optional prompt_cache_key to inject for improved cache routing
-/// `is_codex_oauth`: 当目标后端是 ChatGPT Plus/Pro 反代 (`chatgpt.com/backend-api/codex`) 时为 true。
-/// 该后端强制要求 `store: false`，并要求 `include` 包含 `reasoning.encrypted_content`
-/// 以便在无服务端状态下保持多轮 reasoning 上下文。
-/// `codex_fast_mode`: 仅在 `is_codex_oauth` 为 true 时生效，控制是否注入
+/// `uses_codex_contract`: 当目标后端要求官方 Codex Responses 请求契约时为 true。
+/// 这包括 ChatGPT Plus/Pro 反代，以及用户显式标记的自定义 Codex-compatible
+/// Responses 网关。该契约强制要求 `store: false`，并要求 `include` 包含
+/// `reasoning.encrypted_content`，以便在无服务端状态下保持多轮 reasoning 上下文。
+/// `codex_fast_mode`: 仅在 `uses_codex_contract` 为 true 时生效，控制是否注入
 /// `service_tier = "priority"`。
 pub fn anthropic_to_responses(
     body: Value,
     cache_key: Option<&str>,
-    is_codex_oauth: bool,
+    uses_codex_contract: bool,
     codex_fast_mode: bool,
 ) -> Result<Value, ProxyError> {
     let mut result = json!({});
@@ -404,7 +405,7 @@ pub fn anthropic_to_responses(
     //   （与 OpenAI 官方 codex-rs 当前请求结构保持一致）
     // - stream: 必须永远 true（codex-rs 硬编码 true，且 cc-switch 的
     //   SSE 解析层只处理流式响应，强制覆盖避免客户端误传 false）
-    if is_codex_oauth {
+    if uses_codex_contract {
         result["store"] = json!(false);
         if codex_fast_mode {
             result["service_tier"] = json!("priority");

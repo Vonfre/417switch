@@ -5,6 +5,18 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.18.9] - 2026-07-30
+
+### Added
+
+- Added an explicit **Codex-compatible Responses gateway** option for Claude Code and Claude Science providers. It preserves a custom base URL and bearer token while emitting the official Codex Responses body contract and client routing fingerprint.
+- Added privacy-safe diagnostics for Codex-compatible Science requests: request byte size, instruction/tool counts, contract flags, and classified in-stream upstream failures are logged without request content or credentials.
+
+### Fixed
+
+- Fixed Claude Science main-agent failures against gateways backed by Codex account pools. The compatibility mode now forces `store: false`, returns encrypted reasoning state, supplies required tool fields, strips unsupported output/sampling parameters, and aligns `originator`, client version, and User-Agent headers with Codex.
+- Kept generic OpenAI Responses, Azure, OpenRouter, and other compatible providers byte-compatible unless the new mode is explicitly enabled.
+
 ## [3.18.8] - 2026-07-29
 
 ### Fixed

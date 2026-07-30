@@ -71,6 +71,18 @@ impl Provider {
         self.provider_type() == Some("codex_oauth")
     }
 
+    /// Whether Claude/Science traffic should use the strict request contract
+    /// emitted by the official Codex Responses client while preserving this
+    /// provider's custom base URL and bearer token.
+    pub fn uses_codex_responses_contract(&self) -> bool {
+        self.is_codex_oauth()
+            || self
+                .meta
+                .as_ref()
+                .and_then(|meta| meta.codex_compatible_responses)
+                == Some(true)
+    }
+
     pub fn is_xai_oauth(&self) -> bool {
         self.provider_type() == Some("xai_oauth")
     }
@@ -450,6 +462,14 @@ pub struct ProviderMeta {
     /// - "openai_responses": OpenAI Responses API 格式，需要转换
     #[serde(rename = "apiFormat", skip_serializing_if = "Option::is_none")]
     pub api_format: Option<String>,
+    /// Claude/Science -> custom Responses gateway: use the official Codex
+    /// request body and client fingerprint contract without switching to the
+    /// managed ChatGPT OAuth endpoint.
+    #[serde(
+        rename = "codexCompatibleResponses",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub codex_compatible_responses: Option<bool>,
     /// 通用认证绑定（provider_config / managed_account）
     ///
     /// 新代码应只写入该字段；githubAccountId 仅保留兼容读取。
@@ -1002,6 +1022,25 @@ mod tests {
         let value = serde_json::to_value(&meta).expect("serialize ProviderMeta");
 
         assert!(value.get("pricingModelSource").is_none());
+    }
+
+    #[test]
+    fn provider_meta_roundtrips_codex_compatible_responses() {
+        let meta = ProviderMeta {
+            codex_compatible_responses: Some(true),
+            ..ProviderMeta::default()
+        };
+
+        let value = serde_json::to_value(&meta).expect("serialize ProviderMeta");
+        assert_eq!(
+            value
+                .get("codexCompatibleResponses")
+                .and_then(|item| item.as_bool()),
+            Some(true)
+        );
+
+        let parsed: ProviderMeta = serde_json::from_value(value).expect("deserialize ProviderMeta");
+        assert_eq!(parsed.codex_compatible_responses, Some(true));
     }
 
     #[test]

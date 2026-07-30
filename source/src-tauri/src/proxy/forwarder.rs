@@ -1343,6 +1343,13 @@ impl RequestForwarder {
         } else {
             None
         };
+        let custom_codex_responses_contract = adapter.name() == "Claude"
+            && matches!(
+                resolved_claude_api_format.as_deref(),
+                Some("openai_responses")
+            )
+            && !provider.is_codex_oauth()
+            && provider.uses_codex_responses_contract();
         if adapter.name() == "Claude" {
             if let Some(api_format) = resolved_claude_api_format.as_deref() {
                 super::providers::normalize_anthropic_messages_for_provider(
@@ -1777,6 +1784,21 @@ impl RequestForwarder {
             Vec::new()
         };
 
+        // A custom Codex-compatible Responses gateway keeps its own bearer token
+        // and endpoint, but receives the same stable routing fingerprint as the
+        // official Codex client. This is intentionally opt-in: generic OpenAI,
+        // Azure, and OpenRouter Responses providers remain untouched.
+        if custom_codex_responses_contract {
+            auth_headers.push((
+                http::HeaderName::from_static("originator"),
+                http::HeaderValue::from_static(super::providers::CODEX_OAUTH_ORIGINATOR),
+            ));
+            auth_headers.push((
+                http::HeaderName::from_static("version"),
+                http::HeaderValue::from_static(super::providers::CODEX_OAUTH_CLIENT_VERSION),
+            ));
+        }
+
         // 注入 Codex OAuth 的 ChatGPT-Account-Id header（如果有 account_id）
         if let Some(ref account_id) = codex_oauth_account_id {
             if let Ok(hv) = http::HeaderValue::from_str(account_id) {
@@ -1806,6 +1828,10 @@ impl RequestForwarder {
         // codex_cli_rs UA with the Claude Code UA.
         let custom_user_agent = if custom_user_agent.is_none() && codex_impersonate_claude_code {
             Some(http::HeaderValue::from_static(CLAUDE_CODE_USER_AGENT))
+        } else if custom_user_agent.is_none() && custom_codex_responses_contract {
+            Some(http::HeaderValue::from_static(
+                super::providers::CODEX_RESPONSES_USER_AGENT,
+            ))
         } else {
             custom_user_agent
         };
@@ -2007,6 +2033,12 @@ impl RequestForwarder {
                 continue;
             }
 
+            // Enforce the opt-in Codex-compatible fingerprint instead of
+            // accepting stale or partial values from an Anthropic client.
+            if custom_codex_responses_contract && matches!(key_str, "originator" | "version") {
+                continue;
+            }
+
             // --- accept — force application/json on the Codex→Anthropic path ---
             // The Codex CLI sends `Accept: text/event-stream`, whereas a native
             // Anthropic client sends `application/json` (streaming is driven by
@@ -2157,6 +2189,46 @@ impl RequestForwarder {
                 ProxyError::Internal(format!("Failed to serialize request body: {e}"))
             })?
         };
+
+        if custom_codex_responses_contract {
+            log::info!(
+                "[Claude/Responses] Codex-compatible request: bytes={}, instructions_chars={}, input_items={}, tools={}, store={}, include_reasoning={}, parallel_tool_calls={}, stream={}",
+                body_bytes.len(),
+                filtered_body
+                    .get("instructions")
+                    .and_then(Value::as_str)
+                    .map(|value| value.chars().count())
+                    .unwrap_or(0),
+                filtered_body
+                    .get("input")
+                    .and_then(Value::as_array)
+                    .map(Vec::len)
+                    .unwrap_or(0),
+                filtered_body
+                    .get("tools")
+                    .and_then(Value::as_array)
+                    .map(Vec::len)
+                    .unwrap_or(0),
+                filtered_body
+                    .get("store")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true),
+                filtered_body
+                    .get("include")
+                    .and_then(Value::as_array)
+                    .is_some_and(|items| items.iter().any(|item| {
+                        item.as_str() == Some("reasoning.encrypted_content")
+                    })),
+                filtered_body
+                    .get("parallel_tool_calls")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true),
+                filtered_body
+                    .get("stream")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+            );
+        }
 
         // 确保 content-type 存在
         if !ordered_headers.contains_key(http::header::CONTENT_TYPE) {

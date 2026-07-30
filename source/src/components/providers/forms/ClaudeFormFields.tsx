@@ -143,6 +143,8 @@ interface ClaudeFormFieldsProps {
   // API Format (for Claude-compatible providers that need request/response conversion)
   apiFormat: ClaudeApiFormat;
   onApiFormatChange: (format: ClaudeApiFormat) => void;
+  codexCompatibleResponses: boolean;
+  onCodexCompatibleResponsesChange: (enabled: boolean) => void;
 
   // Auth Field (ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY)
   apiKeyField: ClaudeApiKeyField;
@@ -214,6 +216,8 @@ export function ClaudeFormFields({
   speedTestEndpoints,
   apiFormat,
   onApiFormatChange,
+  codexCompatibleResponses,
+  onCodexCompatibleResponsesChange,
   apiKeyField,
   onApiKeyFieldChange,
   isFullUrl,
@@ -237,6 +241,7 @@ export function ClaudeFormFields({
     defaultFableModel ||
     subagentModel ||
     (!isXaiOauthPreset && apiFormat !== "anthropic") ||
+    codexCompatibleResponses ||
     apiKeyField !== "ANTHROPIC_AUTH_TOKEN" ||
     customUserAgent ||
     hasRequestOverrides
@@ -857,6 +862,31 @@ export function ClaudeFormFields({
                     defaultValue: "选择供应商 API 的输入格式",
                   })}
                 </p>
+                {apiFormat === "openai_responses" && !isCodexOauthPreset && (
+                  <div className="rounded-md border border-border-default p-3">
+                    <label className="flex items-start gap-2 text-sm">
+                      <Checkbox
+                        checked={codexCompatibleResponses}
+                        onCheckedChange={(checked) =>
+                          onCodexCompatibleResponsesChange(checked === true)
+                        }
+                      />
+                      <span className="space-y-1">
+                        <span className="block font-medium text-foreground">
+                          {t("providerForm.codexCompatibleResponses", {
+                            defaultValue: "Codex-compatible Responses 网关",
+                          })}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {t("providerForm.codexCompatibleResponsesHint", {
+                            defaultValue:
+                              "保留当前自定义地址和 Bearer Token，但按官方 Codex 客户端发送 store、加密 reasoning、工具并行和客户端标识。仅用于后端实际由 Codex 账号池驱动的网关。",
+                          })}
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                )}
               </div>
             )}
 

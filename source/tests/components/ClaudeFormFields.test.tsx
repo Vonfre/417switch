@@ -90,6 +90,8 @@ const renderCopilotForm = (overrides: Partial<ClaudeFormFieldsProps> = {}) => {
     speedTestEndpoints: [],
     apiFormat: "anthropic",
     onApiFormatChange: vi.fn(),
+    codexCompatibleResponses: false,
+    onCodexCompatibleResponsesChange: vi.fn(),
     apiKeyField: "ANTHROPIC_AUTH_TOKEN",
     onApiKeyFieldChange: vi.fn(),
     isFullUrl: false,

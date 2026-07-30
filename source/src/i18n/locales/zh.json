@@ -1101,6 +1101,8 @@
     "anthropicSmallFastModel": "快速模型",
     "apiFormat": "API 格式",
     "apiFormatHint": "选择供应商 API 的输入格式",
+    "codexCompatibleResponses": "Codex-compatible Responses 网关",
+    "codexCompatibleResponsesHint": "保留当前自定义地址和 Bearer Token，但按官方 Codex 客户端发送 store、加密 reasoning、工具并行和客户端标识。仅用于后端实际由 Codex 账号池驱动的网关。",
     "customUserAgent": "自定义 User-Agent",
     "customUserAgentHint": "仅在开启本地路由/代理接管后生效，会替换转发到供应商 API 请求中的 User-Agent。",
     "customUserAgentInvalid": "User-Agent 不能包含控制字符（如换行符），否则将被忽略。",

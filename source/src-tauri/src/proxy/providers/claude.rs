@@ -88,8 +88,9 @@ fn build_openai_compatible_url(base: &str, endpoint: &str) -> Option<String> {
 // gpt-5.6-luna 解析到未部署的内部引擎（HTTP 404 Model not found，openai/codex#31967，
 // 本机 A/B 实测确认）。两个头必须成对发送，缺一即 404；version 需 ≥ 目标模型
 // catalog 的 minimal_client_version（luna=0.144.0），新模型抬门槛时同步 bump。
-const CODEX_OAUTH_ORIGINATOR: &str = "codex_cli_rs";
-const CODEX_OAUTH_CLIENT_VERSION: &str = "0.144.1";
+pub(crate) const CODEX_OAUTH_ORIGINATOR: &str = "codex_cli_rs";
+pub(crate) const CODEX_OAUTH_CLIENT_VERSION: &str = "0.144.1";
+pub(crate) const CODEX_RESPONSES_USER_AGENT: &str = "codex_cli_rs/0.144.1";
 
 /// 获取 Claude 供应商的 API 格式
 ///
@@ -406,7 +407,7 @@ pub fn transform_claude_request_for_api_format(
     session_id: Option<&str>,
     shadow_store: Option<&super::gemini_shadow::GeminiShadowStore>,
 ) -> Result<serde_json::Value, ProxyError> {
-    let is_codex_oauth = provider.is_codex_oauth();
+    let uses_codex_contract = provider.uses_codex_responses_contract();
 
     // Copilot 场景：优先从 metadata.user_id 提取 session ID 作为 cache key
     // 格式: "uuid_sessionId" → 提取 "_" 后面的部分作为 session 标识
@@ -458,17 +459,18 @@ pub fn transform_claude_request_for_api_format(
     match api_format {
         "openai_responses" => {
             log::debug!(
-                "[Cache] OpenAI Responses prompt_cache_key source={cache_key_source}, provider={}, codex_oauth={is_codex_oauth}, has_key={}",
+                "[Cache] OpenAI Responses prompt_cache_key source={cache_key_source}, provider={}, codex_contract={uses_codex_contract}, has_key={}",
                 provider.id,
                 cache_key.is_some()
             );
-            // Codex OAuth (ChatGPT Plus/Pro 反代) 需要在请求体里强制 store: false
-            // + include: ["reasoning.encrypted_content"]，由 transform 层统一处理。
+            // Managed Codex OAuth and explicitly marked custom Codex-compatible
+            // gateways share the strict Responses request-body contract. The
+            // latter still keeps its own base URL and bearer token.
             let codex_fast_mode = provider.codex_fast_mode_enabled();
             let mut result = super::transform_responses::anthropic_to_responses(
                 body,
                 cache_key,
-                is_codex_oauth,
+                uses_codex_contract,
                 codex_fast_mode,
             )?;
             if provider.is_xai_oauth() {
@@ -2101,6 +2103,56 @@ mod tests {
             transformed["include"],
             json!(["reasoning.encrypted_content"])
         );
+    }
+
+    #[test]
+    fn custom_codex_compatible_gateway_keeps_url_auth_but_uses_codex_body_contract() {
+        let provider = create_provider_with_meta(
+            json!({
+                "env": {
+                    "ANTHROPIC_BASE_URL": "https://gateway.example/v1",
+                    "ANTHROPIC_AUTH_TOKEN": "test-token"
+                }
+            }),
+            ProviderMeta {
+                api_format: Some("openai_responses".to_string()),
+                codex_compatible_responses: Some(true),
+                ..ProviderMeta::default()
+            },
+        );
+        let body = json!({
+            "model": "gpt-5.6-sol",
+            "messages": [{ "role": "user", "content": "hello" }],
+            "max_tokens": 32000,
+            "temperature": 0.2
+        });
+
+        let transformed = transform_claude_request_for_api_format(
+            body,
+            &provider,
+            "openai_responses",
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(transformed["store"], json!(false));
+        assert_eq!(
+            transformed["include"],
+            json!(["reasoning.encrypted_content"])
+        );
+        assert_eq!(transformed["parallel_tool_calls"], json!(false));
+        assert_eq!(transformed["stream"], json!(true));
+        assert!(transformed.get("max_output_tokens").is_none());
+        assert!(transformed.get("temperature").is_none());
+
+        let adapter = ClaudeAdapter::new();
+        assert_eq!(
+            adapter.extract_base_url(&provider).unwrap(),
+            "https://gateway.example/v1"
+        );
+        let auth = adapter.extract_auth(&provider).unwrap();
+        assert_eq!(auth.strategy, AuthStrategy::ClaudeAuth);
     }
 
     #[test]
