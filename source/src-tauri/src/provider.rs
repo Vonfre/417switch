@@ -71,12 +71,30 @@ impl Provider {
         self.provider_type() == Some("codex_oauth")
     }
 
+    /// Claude Science uses the same compatibility bridge as CSSwitch for
+    /// custom OpenAI Responses providers: request JSON upstream, then replay
+    /// the completed Anthropic response as SSE to Science locally.
+    pub fn uses_science_responses_bridge(&self) -> bool {
+        self.meta.as_ref().is_some_and(|meta| {
+            meta.provider_type.as_deref() == Some("science_custom")
+                && meta.api_format.as_deref() == Some("openai_responses")
+        })
+    }
+
     /// Whether Claude/Science traffic should use the strict request contract
     /// emitted by the official Codex Responses client while preserving this
     /// provider's custom base URL and bearer token.
     pub fn uses_codex_responses_contract(&self) -> bool {
         if self.is_codex_oauth() {
             return true;
+        }
+
+        // Science custom Responses providers are not the ChatGPT Codex edge.
+        // CSSwitch deliberately uses a generic non-streaming Responses bridge
+        // for these endpoints, even when an older 417Switch migration wrote the
+        // v3.18.9 Codex-compatible flag.
+        if self.uses_science_responses_bridge() {
+            return false;
         }
 
         let Some(meta) = self.meta.as_ref() else {
@@ -1054,7 +1072,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_science_responses_provider_defaults_to_codex_contract() {
+    fn legacy_science_responses_provider_defaults_to_csswitch_bridge() {
         let provider = Provider {
             id: "science-responses".to_string(),
             name: "Science Responses".to_string(),
@@ -1074,11 +1092,12 @@ mod tests {
             in_failover_queue: false,
         };
 
-        assert!(provider.uses_codex_responses_contract());
+        assert!(provider.uses_science_responses_bridge());
+        assert!(!provider.uses_codex_responses_contract());
     }
 
     #[test]
-    fn science_responses_provider_honors_explicit_codex_contract_opt_out() {
+    fn science_responses_bridge_overrides_stale_codex_contract_flag() {
         let provider = Provider {
             id: "science-responses".to_string(),
             name: "Science Responses".to_string(),
@@ -1091,7 +1110,7 @@ mod tests {
             meta: Some(ProviderMeta {
                 provider_type: Some("science_custom".to_string()),
                 api_format: Some("openai_responses".to_string()),
-                codex_compatible_responses: Some(false),
+                codex_compatible_responses: Some(true),
                 ..ProviderMeta::default()
             }),
             icon: None,
@@ -1099,6 +1118,7 @@ mod tests {
             in_failover_queue: false,
         };
 
+        assert!(provider.uses_science_responses_bridge());
         assert!(!provider.uses_codex_responses_contract());
     }
 

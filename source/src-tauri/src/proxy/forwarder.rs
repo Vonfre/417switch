@@ -1350,6 +1350,12 @@ impl RequestForwarder {
             )
             && !provider.is_codex_oauth()
             && provider.uses_codex_responses_contract();
+        let science_responses_bridge = adapter.name() == "Claude"
+            && matches!(
+                resolved_claude_api_format.as_deref(),
+                Some("openai_responses")
+            )
+            && provider.uses_science_responses_bridge();
         if adapter.name() == "Claude" {
             if let Some(api_format) = resolved_claude_api_format.as_deref() {
                 super::providers::normalize_anthropic_messages_for_provider(
@@ -2039,12 +2045,14 @@ impl RequestForwarder {
                 continue;
             }
 
-            // --- accept — force application/json on the Codex→Anthropic path ---
+            // --- accept — force application/json when the upstream response is JSON ---
             // The Codex CLI sends `Accept: text/event-stream`, whereas a native
             // Anthropic client sends `application/json` (streaming is driven by
             // the body's stream:true). Strict Anthropic gateways return 406 Not
             // Acceptable for an event-stream Accept, so normalize it here.
-            if codex_responses_to_anthropic && key_str.eq_ignore_ascii_case("accept") {
+            if (codex_responses_to_anthropic || science_responses_bridge)
+                && key_str.eq_ignore_ascii_case("accept")
+            {
                 if !saw_accept {
                     saw_accept = true;
                     ordered_headers.append(
@@ -2133,8 +2141,8 @@ impl RequestForwarder {
             );
         }
 
-        // On the Codex→Anthropic path, add application/json when Accept is missing (matching a native Anthropic client).
-        if codex_responses_to_anthropic && !saw_accept {
+        // JSON upstream paths must not inherit Science/Codex's event-stream Accept.
+        if (codex_responses_to_anthropic || science_responses_bridge) && !saw_accept {
             ordered_headers.append(
                 http::header::ACCEPT,
                 http::HeaderValue::from_static("application/json"),
@@ -2190,7 +2198,35 @@ impl RequestForwarder {
             })?
         };
 
-        if custom_codex_responses_contract {
+        if science_responses_bridge {
+            log::info!(
+                "[Claude/Responses] CSSwitch-compatible request: bytes={}, instructions_chars={}, input_items={}, tools={}, max_output_tokens={}, stream={}",
+                body_bytes.len(),
+                filtered_body
+                    .get("instructions")
+                    .and_then(Value::as_str)
+                    .map(|value| value.chars().count())
+                    .unwrap_or(0),
+                filtered_body
+                    .get("input")
+                    .and_then(Value::as_array)
+                    .map(Vec::len)
+                    .unwrap_or(0),
+                filtered_body
+                    .get("tools")
+                    .and_then(Value::as_array)
+                    .map(Vec::len)
+                    .unwrap_or(0),
+                filtered_body
+                    .get("max_output_tokens")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0),
+                filtered_body
+                    .get("stream")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true),
+            );
+        } else if custom_codex_responses_contract {
             log::info!(
                 "[Claude/Responses] Codex-compatible request: bytes={}, instructions_chars={}, input_items={}, tools={}, store={}, include_reasoning={}, parallel_tool_calls={}, stream={}",
                 body_bytes.len(),

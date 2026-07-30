@@ -5,6 +5,13 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.18.11] - 2026-07-30
+
+### Fixed
+
+- Aligned Claude Science custom OpenAI Responses routing with CSSwitch: upstream requests are non-streaming JSON with a bounded output limit, then replayed locally as Anthropic SSE for Science.
+- Removed the incorrect ChatGPT Codex edge contract from Science providers while retaining it for real Codex-compatible Claude providers.
+
 ## [3.18.10] - 2026-07-30
 
 ### Fixed

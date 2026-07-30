@@ -395,6 +395,135 @@ fn spawn_claude_usage_log(
     });
 }
 
+/// Replay a completed Anthropic message as a valid Anthropic SSE lifecycle.
+/// CSSwitch uses this bridge for Claude Science because many custom Responses
+/// gateways are reliable only in non-streaming mode even though Science itself
+/// requires a streaming Anthropic response.
+fn anthropic_message_to_sse_body(response: &Value) -> Result<Bytes, ProxyError> {
+    let mut output = String::new();
+    let mut push_event = |event: &str, data: Value| -> Result<(), ProxyError> {
+        let data = serde_json::to_string(&data).map_err(|error| {
+            ProxyError::TransformError(format!("Failed to serialize Anthropic SSE event: {error}"))
+        })?;
+        output.push_str("event: ");
+        output.push_str(event);
+        output.push_str("\ndata: ");
+        output.push_str(&data);
+        output.push_str("\n\n");
+        Ok(())
+    };
+
+    let usage = response
+        .get("usage")
+        .cloned()
+        .unwrap_or_else(|| json!({"input_tokens": 0, "output_tokens": 0}));
+    push_event(
+        "message_start",
+        json!({"type": "message_start", "message": {
+            "id": response.get("id").and_then(Value::as_str).unwrap_or("msg_proxy"),
+            "type": "message",
+            "role": "assistant",
+            "model": response.get("model").cloned().unwrap_or(Value::Null),
+            "content": [],
+            "stop_reason": Value::Null,
+            "stop_sequence": Value::Null,
+            "usage": usage
+        }}),
+    )?;
+    push_event("ping", json!({"type": "ping"}))?;
+
+    let default_blocks = [json!({"type": "text", "text": ""})];
+    let blocks = response
+        .get("content")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&default_blocks);
+    for (index, block) in blocks.iter().enumerate() {
+        match block.get("type").and_then(Value::as_str) {
+            Some("tool_use") => {
+                push_event(
+                    "content_block_start",
+                    json!({"type": "content_block_start", "index": index, "content_block": {
+                        "type": "tool_use",
+                        "id": block.get("id").cloned().unwrap_or(Value::Null),
+                        "name": block.get("name").cloned().unwrap_or(Value::Null),
+                        "input": {}
+                    }}),
+                )?;
+                let empty_input = json!({});
+                let partial_json = serde_json::to_string(
+                    block.get("input").unwrap_or(&empty_input),
+                )
+                .map_err(|error| {
+                    ProxyError::TransformError(format!(
+                        "Failed to serialize replayed tool input: {error}"
+                    ))
+                })?;
+                push_event(
+                    "content_block_delta",
+                    json!({"type": "content_block_delta", "index": index, "delta": {
+                        "type": "input_json_delta",
+                        "partial_json": partial_json
+                    }}),
+                )?;
+            }
+            Some("thinking") => {
+                push_event(
+                    "content_block_start",
+                    json!({"type": "content_block_start", "index": index, "content_block": {
+                        "type": "thinking", "thinking": "", "signature": ""
+                    }}),
+                )?;
+                push_event(
+                    "content_block_delta",
+                    json!({"type": "content_block_delta", "index": index, "delta": {
+                        "type": "thinking_delta",
+                        "thinking": block.get("thinking").and_then(Value::as_str).unwrap_or("")
+                    }}),
+                )?;
+                push_event(
+                    "content_block_delta",
+                    json!({"type": "content_block_delta", "index": index, "delta": {
+                        "type": "signature_delta",
+                        "signature": block.get("signature").and_then(Value::as_str).unwrap_or("")
+                    }}),
+                )?;
+            }
+            _ => {
+                push_event(
+                    "content_block_start",
+                    json!({"type": "content_block_start", "index": index, "content_block": {
+                        "type": "text", "text": ""
+                    }}),
+                )?;
+                push_event(
+                    "content_block_delta",
+                    json!({"type": "content_block_delta", "index": index, "delta": {
+                        "type": "text_delta",
+                        "text": block.get("text").and_then(Value::as_str).unwrap_or("")
+                    }}),
+                )?;
+            }
+        }
+        push_event(
+            "content_block_stop",
+            json!({"type": "content_block_stop", "index": index}),
+        )?;
+    }
+
+    push_event(
+        "message_delta",
+        json!({"type": "message_delta", "delta": {
+            "stop_reason": response.get("stop_reason").and_then(Value::as_str).unwrap_or("end_turn"),
+            "stop_sequence": Value::Null
+        }, "usage": {
+            "output_tokens": response.pointer("/usage/output_tokens").and_then(Value::as_u64).unwrap_or(0)
+        }}),
+    )?;
+    push_event("message_stop", json!({"type": "message_stop"}))?;
+    Ok(Bytes::from(output))
+}
+
 async fn handle_claude_transform(
     response: super::hyper_client::ProxyResponse,
     ctx: &RequestContext,
@@ -418,16 +547,21 @@ async fn handle_claude_transform(
     // 场景（任意上游 is_sse、非 Codex OAuth 等）仍沿用原有流式兜底。
     let aggregate_codex_oauth_responses_sse =
         !is_stream && is_codex_oauth && api_format == "openai_responses";
-    let use_streaming = if aggregate_codex_oauth_responses_sse {
-        false
-    } else {
-        should_use_claude_transform_streaming(
-            is_stream,
-            response.is_sse(),
-            api_format,
-            is_codex_oauth,
-        )
-    };
+    let replay_science_responses_json_as_sse = is_stream
+        && ctx.provider.uses_science_responses_bridge()
+        && api_format == "openai_responses"
+        && !response.is_sse();
+    let use_streaming =
+        if aggregate_codex_oauth_responses_sse || replay_science_responses_json_as_sse {
+            false
+        } else {
+            should_use_claude_transform_streaming(
+                is_stream,
+                response.is_sse(),
+                api_format,
+                is_codex_oauth,
+            )
+        };
     let tool_schema_hints = transform_gemini::extract_anthropic_tool_schema_hints(original_body);
     let tool_schema_hints = (!tool_schema_hints.is_empty()).then_some(tool_schema_hints);
 
@@ -638,7 +772,13 @@ async fn handle_claude_transform(
     // 记录使用量
     // 全 0 usage 不落账（对齐 Codex 流式收集器的 skip）：SSE 聚合兜底救回的流
     // 在上游缺 stream_options.include_usage 时没有 usage，写入只会产生无意义空行
-    spawn_claude_usage_log(state, ctx, &anthropic_response, status.as_u16(), false);
+    spawn_claude_usage_log(
+        state,
+        ctx,
+        &anthropic_response,
+        status.as_u16(),
+        replay_science_responses_json_as_sse,
+    );
 
     // 构建响应
     let mut builder = axum::response::Response::builder().status(status);
@@ -649,6 +789,26 @@ async fn handle_claude_transform(
 
     for (key, value) in response_headers.iter() {
         builder = builder.header(key, value);
+    }
+
+    if replay_science_responses_json_as_sse {
+        builder = builder
+            .header(
+                axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("text/event-stream"),
+            )
+            .header(
+                axum::http::header::CACHE_CONTROL,
+                axum::http::HeaderValue::from_static("no-cache"),
+            );
+        let response_body = anthropic_message_to_sse_body(&anthropic_response)?;
+        return builder
+            .body(axum::body::Body::from(response_body))
+            .map_err(|error| {
+                ProxyError::Internal(format!(
+                    "Failed to build replayed Science response: {error}"
+                ))
+            });
     }
 
     builder = builder.header(
@@ -2688,11 +2848,36 @@ async fn log_usage(
 #[cfg(test)]
 mod tests {
     use super::{
-        body_looks_like_sse, chat_sse_to_response_value, classify_body_for_diagnostics,
-        codex_proxy_error_json, responses_sse_to_response_value,
+        anthropic_message_to_sse_body, body_looks_like_sse, chat_sse_to_response_value,
+        classify_body_for_diagnostics, codex_proxy_error_json, responses_sse_to_response_value,
         should_use_claude_transform_streaming, transform, upstream_body_parse_error,
     };
     use crate::proxy::ProxyError;
+    use serde_json::json;
+
+    #[test]
+    fn science_json_response_replays_as_complete_anthropic_sse() {
+        let body = anthropic_message_to_sse_body(&json!({
+            "id": "msg_science",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-opus-4-8",
+            "content": [
+                {"type": "text", "text": "hello"},
+                {"type": "tool_use", "id": "call_1", "name": "lookup", "input": {"q": "x"}}
+            ],
+            "stop_reason": "tool_use",
+            "usage": {"input_tokens": 12, "output_tokens": 7}
+        }))
+        .unwrap();
+        let rendered = String::from_utf8(body.to_vec()).unwrap();
+
+        assert!(rendered.contains("event: message_start"));
+        assert!(rendered.contains("event: content_block_delta"));
+        assert!(rendered.contains(r#""partial_json":"{\"q\":\"x\"}""#));
+        assert!(rendered.contains(r#""stop_reason":"tool_use""#));
+        assert!(rendered.ends_with("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"));
+    }
 
     #[test]
     fn body_looks_like_sse_detects_unlabeled_sse_prefixes() {

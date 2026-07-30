@@ -473,6 +473,32 @@ pub fn transform_claude_request_for_api_format(
                 uses_codex_contract,
                 codex_fast_mode,
             )?;
+            if provider.uses_science_responses_bridge() {
+                // Match CSSwitch's proven Science bridge contract. Science asks
+                // the local proxy for SSE, but the custom Responses upstream is
+                // called non-streaming; handlers replay the completed Anthropic
+                // message as SSE locally. Keep an explicit output ceiling and
+                // avoid generic extensions that the CSSwitch path never sends.
+                const CSSWITCH_RESPONSES_MAX_OUTPUT_TOKENS: u64 = 65_536;
+                result["stream"] = json!(false);
+                if let Some(value) = result.get("max_output_tokens").and_then(Value::as_u64) {
+                    result["max_output_tokens"] =
+                        json!(value.min(CSSWITCH_RESPONSES_MAX_OUTPUT_TOKENS));
+                }
+                if let Some(object) = result.as_object_mut() {
+                    object.remove("prompt_cache_key");
+                    object.remove("reasoning");
+                    if object
+                        .get("tools")
+                        .and_then(Value::as_array)
+                        .is_some_and(|tools| !tools.is_empty())
+                    {
+                        object
+                            .entry("tool_choice".to_string())
+                            .or_insert(json!("auto"));
+                    }
+                }
+            }
             if provider.is_xai_oauth() {
                 const REASONING_MARKER: &str = "reasoning.encrypted_content";
                 let mut include = result
@@ -2156,7 +2182,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_science_responses_provider_uses_codex_body_contract() {
+    fn legacy_science_responses_provider_uses_csswitch_nonstream_contract() {
         let provider = create_provider_with_meta(
             json!({
                 "env": {
@@ -2173,7 +2199,14 @@ mod tests {
         let body = json!({
             "model": "gpt-5.6-sol",
             "messages": [{ "role": "user", "content": "hello" }],
-            "max_tokens": 32000
+            "max_tokens": 999999,
+            "stream": true,
+            "thinking": { "type": "enabled", "budget_tokens": 4096 },
+            "tools": [{
+                "name": "lookup",
+                "description": "Lookup",
+                "input_schema": { "type": "object", "properties": {} }
+            }]
         });
 
         let transformed = transform_claude_request_for_api_format(
@@ -2185,13 +2218,13 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(transformed["store"], json!(false));
-        assert_eq!(
-            transformed["include"],
-            json!(["reasoning.encrypted_content"])
-        );
-        assert_eq!(transformed["parallel_tool_calls"], json!(false));
-        assert_eq!(transformed["stream"], json!(true));
+        assert_eq!(transformed["stream"], json!(false));
+        assert_eq!(transformed["max_output_tokens"], json!(65_536));
+        assert_eq!(transformed["tool_choice"], json!("auto"));
+        assert!(transformed.get("store").is_none());
+        assert!(transformed.get("include").is_none());
+        assert!(transformed.get("parallel_tool_calls").is_none());
+        assert!(transformed.get("reasoning").is_none());
     }
 
     #[test]

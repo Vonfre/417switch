@@ -1,6 +1,6 @@
 {
   "name": "417switch",
-  "version": "3.18.10",
+  "version": "3.18.11",
   "description": "All-in-One Assistant for Claude Code, Codex & Gemini CLI",
   "type": "module",
   "scripts": {

@@ -1,6 +1,6 @@
 [package]
 name = "switch417"
-version = "3.18.10"
+version = "3.18.11"
 description = "All-in-One Assistant for Claude Code, Codex & Gemini CLI"
 authors = ["Jason Young"]
 license = "MIT"
