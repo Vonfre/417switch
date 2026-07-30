@@ -2156,6 +2156,45 @@ mod tests {
     }
 
     #[test]
+    fn legacy_science_responses_provider_uses_codex_body_contract() {
+        let provider = create_provider_with_meta(
+            json!({
+                "env": {
+                    "ANTHROPIC_BASE_URL": "https://gateway.example/v1",
+                    "ANTHROPIC_AUTH_TOKEN": "test-token"
+                }
+            }),
+            ProviderMeta {
+                provider_type: Some("science_custom".to_string()),
+                api_format: Some("openai_responses".to_string()),
+                ..ProviderMeta::default()
+            },
+        );
+        let body = json!({
+            "model": "gpt-5.6-sol",
+            "messages": [{ "role": "user", "content": "hello" }],
+            "max_tokens": 32000
+        });
+
+        let transformed = transform_claude_request_for_api_format(
+            body,
+            &provider,
+            "openai_responses",
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(transformed["store"], json!(false));
+        assert_eq!(
+            transformed["include"],
+            json!(["reasoning.encrypted_content"])
+        );
+        assert_eq!(transformed["parallel_tool_calls"], json!(false));
+        assert_eq!(transformed["stream"], json!(true));
+    }
+
+    #[test]
     fn test_transform_claude_request_for_api_format_gemini_native() {
         let provider = create_provider_with_meta(
             json!({

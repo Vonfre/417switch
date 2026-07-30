@@ -75,12 +75,22 @@ impl Provider {
     /// emitted by the official Codex Responses client while preserving this
     /// provider's custom base URL and bearer token.
     pub fn uses_codex_responses_contract(&self) -> bool {
-        self.is_codex_oauth()
-            || self
-                .meta
-                .as_ref()
-                .and_then(|meta| meta.codex_compatible_responses)
-                == Some(true)
+        if self.is_codex_oauth() {
+            return true;
+        }
+
+        let Some(meta) = self.meta.as_ref() else {
+            return false;
+        };
+
+        // Honor an explicit user choice first. Science providers created before
+        // v3.18.10 did not persist this field at all, so legacy Responses
+        // providers need a safe compatibility default in order to actually use
+        // the Codex request contract introduced in v3.18.9.
+        meta.codex_compatible_responses.unwrap_or_else(|| {
+            meta.provider_type.as_deref() == Some("science_custom")
+                && meta.api_format.as_deref() == Some("openai_responses")
+        })
     }
 
     pub fn is_xai_oauth(&self) -> bool {
@@ -1041,6 +1051,55 @@ mod tests {
 
         let parsed: ProviderMeta = serde_json::from_value(value).expect("deserialize ProviderMeta");
         assert_eq!(parsed.codex_compatible_responses, Some(true));
+    }
+
+    #[test]
+    fn legacy_science_responses_provider_defaults_to_codex_contract() {
+        let provider = Provider {
+            id: "science-responses".to_string(),
+            name: "Science Responses".to_string(),
+            settings_config: json!({}),
+            website_url: None,
+            category: None,
+            created_at: None,
+            sort_index: None,
+            notes: None,
+            meta: Some(ProviderMeta {
+                provider_type: Some("science_custom".to_string()),
+                api_format: Some("openai_responses".to_string()),
+                ..ProviderMeta::default()
+            }),
+            icon: None,
+            icon_color: None,
+            in_failover_queue: false,
+        };
+
+        assert!(provider.uses_codex_responses_contract());
+    }
+
+    #[test]
+    fn science_responses_provider_honors_explicit_codex_contract_opt_out() {
+        let provider = Provider {
+            id: "science-responses".to_string(),
+            name: "Science Responses".to_string(),
+            settings_config: json!({}),
+            website_url: None,
+            category: None,
+            created_at: None,
+            sort_index: None,
+            notes: None,
+            meta: Some(ProviderMeta {
+                provider_type: Some("science_custom".to_string()),
+                api_format: Some("openai_responses".to_string()),
+                codex_compatible_responses: Some(false),
+                ..ProviderMeta::default()
+            }),
+            icon: None,
+            icon_color: None,
+            in_failover_queue: false,
+        };
+
+        assert!(!provider.uses_codex_responses_contract());
     }
 
     #[test]

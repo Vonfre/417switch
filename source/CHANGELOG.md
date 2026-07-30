@@ -5,6 +5,13 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.18.10] - 2026-07-30
+
+### Fixed
+
+- Fixed Claude Science's dedicated provider form not saving the Codex-compatible Responses option added in v3.18.9.
+- Existing Claude Science OpenAI Responses providers now automatically use the Codex request contract, while an explicit opt-out remains available in the Science provider editor.
+
 ## [3.18.9] - 2026-07-30
 
 ### Added

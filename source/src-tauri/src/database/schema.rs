@@ -511,6 +511,13 @@ impl Database {
                         Self::migrate_v15_to_v16(conn)?;
                         Self::set_user_version(conn, 16)?;
                     }
+                    16 => {
+                        log::info!(
+                            "迁移数据库从 v16 到 v17（启用旧 Claude Science Responses 的 Codex 兼容契约）"
+                        );
+                        Self::migrate_v16_to_v17(conn)?;
+                        Self::set_user_version(conn, 17)?;
+                    }
                     _ => {
                         return Err(AppError::Database(format!(
                             "未知的数据库版本 {version}，无法迁移到 {SCHEMA_VERSION}"
@@ -1521,6 +1528,33 @@ impl Database {
     fn migrate_v15_to_v16(conn: &Connection) -> Result<(), AppError> {
         let codex_dir = crate::codex_config::get_codex_config_dir();
         crate::services::session_usage_codex::reset_codex_usage_on_conn(conn, &codex_dir)
+    }
+
+    /// v16 -> v17: Science's dedicated provider form did not persist the
+    /// Codex-compatible Responses flag before v3.18.10. Upgrade only legacy
+    /// Science Responses providers that have no explicit choice; an existing
+    /// false value remains an opt-out.
+    fn migrate_v16_to_v17(conn: &Connection) -> Result<(), AppError> {
+        if !Self::table_exists(conn, "providers")? {
+            return Ok(());
+        }
+
+        conn.execute(
+            "UPDATE providers
+             SET meta = json_set(
+                 meta,
+                 '$.codexCompatibleResponses', json('true'),
+                 '$.providerType', COALESCE(json_extract(meta, '$.providerType'), 'science_custom')
+             )
+             WHERE app_type = 'science'
+               AND json_valid(meta)
+               AND json_extract(meta, '$.apiFormat') = 'openai_responses'
+               AND json_type(meta, '$.codexCompatibleResponses') IS NULL",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+        Ok(())
     }
 
     /// 插入默认模型定价数据
@@ -3091,6 +3125,50 @@ mod tests {
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )?;
         assert_eq!(counts, (0, 1, 0, 1));
+        Ok(())
+    }
+
+    #[test]
+    fn migrate_v16_to_v17_enables_only_legacy_science_responses_providers() -> Result<(), AppError>
+    {
+        let conn = Connection::open_in_memory()?;
+        Database::create_tables_on_conn(&conn)?;
+        conn.execute_batch(
+            "INSERT INTO providers (id, app_type, name, settings_config, meta) VALUES
+                ('legacy-science', 'science', 'Legacy Science', '{}',
+                 '{\"apiFormat\":\"openai_responses\"}'),
+                ('science-opt-out', 'science', 'Science Opt Out', '{}',
+                 '{\"apiFormat\":\"openai_responses\",\"codexCompatibleResponses\":false}'),
+                ('science-chat', 'science', 'Science Chat', '{}',
+                 '{\"apiFormat\":\"openai_chat\"}'),
+                ('claude-responses', 'claude', 'Claude Responses', '{}',
+                 '{\"apiFormat\":\"openai_responses\"}');",
+        )?;
+        Database::set_user_version(&conn, 16)?;
+
+        Database::apply_schema_migrations_on_conn(&conn)?;
+
+        assert_eq!(Database::get_user_version(&conn)?, 17);
+        let migrated: (i64, String) = conn.query_row(
+            "SELECT
+                json_extract(meta, '$.codexCompatibleResponses'),
+                json_extract(meta, '$.providerType')
+             FROM providers
+             WHERE id = 'legacy-science' AND app_type = 'science'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        assert_eq!(migrated, (1, "science_custom".to_string()));
+
+        let untouched: (i64, i64, i64) = conn.query_row(
+            "SELECT
+                json_extract((SELECT meta FROM providers WHERE id = 'science-opt-out'), '$.codexCompatibleResponses'),
+                json_type((SELECT meta FROM providers WHERE id = 'science-chat'), '$.codexCompatibleResponses') IS NULL,
+                json_type((SELECT meta FROM providers WHERE id = 'claude-responses'), '$.codexCompatibleResponses') IS NULL",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        assert_eq!(untouched, (0, 1, 1));
         Ok(())
     }
 }

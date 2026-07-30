@@ -21,6 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   fetchModelsForConfig,
   showFetchModelsError,
@@ -105,6 +106,11 @@ export function ScienceProviderForm({
 
   const [apiFormat, setApiFormat] =
     useState<ScienceApiFormat>(initialApiFormat);
+  const [codexCompatibleResponses, setCodexCompatibleResponses] = useState(
+    () =>
+      initialData?.meta?.codexCompatibleResponses ??
+      initialApiFormat === "openai_responses",
+  );
   const [baseUrl, setBaseUrl] = useState(
     envString(initialConfig, "ANTHROPIC_BASE_URL"),
   );
@@ -156,6 +162,9 @@ export function ScienceProviderForm({
 
   const handleTemplateChange = (template: ScienceTemplate) => {
     setApiFormat(template.id);
+    if (template.id === "openai_responses") {
+      setCodexCompatibleResponses(true);
+    }
     if (!initialData && !form.getValues("name").trim()) {
       form.setValue("name", template.title);
     }
@@ -245,6 +254,8 @@ export function ScienceProviderForm({
       isFullUrl: false,
       endpointAutoSelect: false,
       providerType: "science_custom",
+      codexCompatibleResponses:
+        apiFormat === "openai_responses" && codexCompatibleResponses,
     };
     const payload: ProviderFormValues = {
       ...values,
@@ -346,6 +357,25 @@ export function ScienceProviderForm({
             {activeTemplate.description}
           </p>
         </div>
+
+        {apiFormat === "openai_responses" && (
+          <div className="flex items-start justify-between gap-4 rounded-xl border bg-muted/20 p-4">
+            <div className="space-y-1">
+              <FormLabel htmlFor="science-codex-compatible-responses">
+                {t("providerForm.codexCompatibleResponses")}
+              </FormLabel>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t("providerForm.codexCompatibleResponsesHint")}
+              </p>
+            </div>
+            <Switch
+              id="science-codex-compatible-responses"
+              checked={codexCompatibleResponses}
+              onCheckedChange={setCodexCompatibleResponses}
+              className="mt-0.5 shrink-0"
+            />
+          </div>
+        )}
 
         <div className="space-y-2">
           <FormLabel htmlFor="science-api-key">
