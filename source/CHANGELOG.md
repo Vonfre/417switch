@@ -5,6 +5,17 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.19.1] - 2026-08-04
+
+### Changed
+
+- Integrated the cc-switch v3.19.1 release line, including its security hardening, native Codex Responses presets, model pricing synchronization, usage-accounting fixes, deep-link validation, and proxy/runtime cleanup.
+- Preserved the 417Switch application identity, independent updater channel, Claude Science controls, Simplified Chinese Science patch, and Codex-compatible Science routing.
+
+### Fixed
+
+- Accepted both official Claude Science 0.1.25 updater identifiers (`com.anthropic.operon` and `com.anthropic.operon.cli`) while retaining fixed-path, owner, permission, Mach-O, Team ID, SHA-256 snapshot, and source-stability checks.
+
 ## [3.18.11] - 2026-07-30
 
 ### Fixed

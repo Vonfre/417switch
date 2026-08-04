@@ -37,6 +37,9 @@ const REAL_SCIENCE_PORT: u16 = 8_765;
 const OFFICIAL_APP_BIN: &str =
     "/Applications/Claude Science.app/Contents/Resources/bin/claude-science";
 const UPDATED_BIN_RELATIVE: &str = ".claude-science/bin/claude-science";
+const OFFICIAL_UPDATED_SCIENCE_IDENTIFIERS: [&str; 2] =
+    ["com.anthropic.operon", "com.anthropic.operon.cli"];
+const OFFICIAL_SCIENCE_TEAM_ID: &str = "Q6L2SF6YDW";
 const VIRTUAL_EMAIL: &str = "417switch@localhost.invalid";
 const HKDF_INFO: &[u8] = b"operon:aes-256-gcm:oauth";
 const AAD: &[u8] = b"v2:oauth";
@@ -1063,11 +1066,49 @@ fn validate_executable(path: &Path, require_current_owner: bool) -> Result<Vec<u
     Ok(bytes)
 }
 
+fn embedded_identity_metadata_matches(details: &str, identifier: &str, team_id: &str) -> bool {
+    details
+        .lines()
+        .map(str::trim)
+        .any(|line| line == format!("Identifier={identifier}"))
+        && details
+            .lines()
+            .map(str::trim)
+            .any(|line| line == format!("TeamIdentifier={team_id}"))
+}
+
+fn official_updated_embedded_identity_metadata_matches(details: &str) -> bool {
+    OFFICIAL_UPDATED_SCIENCE_IDENTIFIERS
+        .iter()
+        .any(|identifier| {
+            embedded_identity_metadata_matches(details, identifier, OFFICIAL_SCIENCE_TEAM_ID)
+        })
+}
+
+fn validate_official_updated_identity(path: &Path) -> Result<(), String> {
+    let output = Command::new("/usr/bin/codesign")
+        .args(["-d", "--verbose=4"])
+        .arg(path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("检查 updater Science 签名元数据失败：{e}"))?;
+    if !output.status.success()
+        || !official_updated_embedded_identity_metadata_matches(&String::from_utf8_lossy(
+            &output.stderr,
+        ))
+    {
+        return Err("updater Science executable 的标识或 Team ID 不在官方允许列表中".into());
+    }
+    Ok(())
+}
+
 fn sha256(bytes: &[u8]) -> String {
     hex(&Sha256::digest(bytes))
 }
 
 fn snapshot_updated_runtime(source: &Path) -> Result<PathBuf, String> {
+    validate_official_updated_identity(source)?;
     let before = std::fs::symlink_metadata(source)
         .map_err(|e| format!("检查 updater Science executable 失败：{e}"))?;
     let bytes = validate_executable(source, true)?;
@@ -2419,6 +2460,25 @@ pub async fn stop() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn official_updater_identity_accepts_only_known_exact_variants() {
+        assert!(official_updated_embedded_identity_metadata_matches(
+            "Identifier=com.anthropic.operon\nTeamIdentifier=Q6L2SF6YDW\n"
+        ));
+        assert!(official_updated_embedded_identity_metadata_matches(
+            "Identifier=com.anthropic.operon.cli\nTeamIdentifier=Q6L2SF6YDW\n"
+        ));
+        assert!(!official_updated_embedded_identity_metadata_matches(
+            "Identifier=com.anthropic.operon.other\nTeamIdentifier=Q6L2SF6YDW\n"
+        ));
+        assert!(!official_updated_embedded_identity_metadata_matches(
+            "Identifier=com.anthropic.operon\nTeamIdentifier=WRONG\n"
+        ));
+        assert!(!official_updated_embedded_identity_metadata_matches(
+            "prefix-Identifier=com.anthropic.operon\nTeamIdentifier=Q6L2SF6YDW-suffix\n"
+        ));
+    }
 
     fn put_u32(bytes: &mut [u8], offset: usize, value: u32) {
         bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());

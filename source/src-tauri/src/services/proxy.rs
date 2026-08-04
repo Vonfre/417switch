@@ -5474,7 +5474,7 @@ model = "gpt-5.1-codex"
         service
             .write_claude_live(&json!({
                 "env": {
-                    "ANTHROPIC_BASE_URL": "http://127.0.0.1:15721",
+                    "ANTHROPIC_BASE_URL": "http://127.0.0.1:41721",
                     "ANTHROPIC_API_KEY": PROXY_TOKEN_PLACEHOLDER,
                     "ANTHROPIC_MODEL": "stale-model",
                     "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "Stale Sonnet",
@@ -5506,7 +5506,7 @@ model = "gpt-5.1-codex"
             live.get("env")
                 .and_then(|env| env.get("ANTHROPIC_BASE_URL"))
                 .and_then(|v| v.as_str()),
-            Some("http://127.0.0.1:15721"),
+            Some("http://127.0.0.1:41721"),
             "takeover proxy URL should remain active"
         );
         assert!(
@@ -6019,7 +6019,7 @@ model = "gpt-5.4"
 
 [model_providers.rightcode]
 name = "RightCode"
-base_url = "http://127.0.0.1:15721/v1"
+base_url = "http://127.0.0.1:41721/v1"
 wire_api = "responses"
 requires_openai_auth = true
 "#
@@ -6089,7 +6089,7 @@ requires_openai_auth = true
                 .and_then(|v| v.get("aihubmix"))
                 .and_then(|v| v.get("base_url"))
                 .and_then(|v| v.as_str()),
-            Some("http://127.0.0.1:15721/v1"),
+            Some("http://127.0.0.1:41721/v1"),
             "taken-over live config should stay pointed at the local proxy"
         );
 
@@ -6194,7 +6194,7 @@ model = "responses-model"
 
 [model_providers.stable]
 name = "Stable"
-base_url = "http://127.0.0.1:15721/v1"
+base_url = "http://127.0.0.1:41721/v1"
 wire_api = "responses"
 requires_openai_auth = true
 "#
@@ -6231,7 +6231,7 @@ requires_openai_auth = true
                 .and_then(|v| v.get("deepseek"))
                 .and_then(|v| v.get("base_url"))
                 .and_then(|v| v.as_str()),
-            Some("http://127.0.0.1:15721/v1")
+            Some("http://127.0.0.1:41721/v1")
         );
         assert_eq!(
             parsed_live.get("model").and_then(|v| v.as_str()),
