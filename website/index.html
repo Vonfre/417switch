@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>417Switch — AI 编程与 Claude Science，一站融合</title>
+    <meta
+      name="description"
+      content="417Switch 基于 CC Switch 与 CSSwitch 实现，把 AI 编程工具管理和 Claude Science 融合到一个本地优先的桌面应用中。"
+    />
+    <meta
+      name="keywords"
+      content="417Switch, CC Switch, CSSwitch, Claude Science, Claude Code, Codex, Gemini CLI, AI 编程"
+    />
+    <meta name="author" content="417Switch" />
+    <meta name="theme-color" content="#ece6dc" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <link rel="canonical" href="https://417switch.io/" />
+    <link rel="icon" href="./assets/logo.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./site.webmanifest" />
+    <link rel="stylesheet" href="./styles.css" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="417Switch" />
+    <meta property="og:title" content="417Switch — AI 编程与 Claude Science，一站融合" />
+    <meta
+      property="og:description"
+      content="基于 CC Switch 与 CSSwitch 实现。只需要一边，就选择对应项目；想要融合体验，就选择 417Switch。"
+    />
+    <meta property="og:url" content="https://417switch.io/" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "417Switch",
+        "url": "https://417switch.io/",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS",
+        "isAccessibleForFree": true,
+        "license": "https://www.apache.org/licenses/LICENSE-2.0",
+        "codeRepository": "https://github.com/Vonfre/417switch",
+        "description": "基于 CC Switch 与 CSSwitch 实现的 AI 编程与 Claude Science 融合桌面应用。"
+      }
+    </script>
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+
+    <header class="site-header" data-header>
+      <div class="container nav-wrap">
+        <a class="brand" href="#top" aria-label="417Switch 首页">
+          <img src="./assets/logo.svg" alt="" width="38" height="38" />
+          <span>417<span>Switch</span></span>
+        </a>
+
+        <nav class="desktop-nav" aria-label="主导航">
+          <a href="#why">为什么选择</a>
+          <a href="#choose">怎么选</a>
+          <a href="#features">功能</a>
+          <a href="#origin">项目关系</a>
+        </nav>
+
+        <div class="nav-actions">
+          <button class="icon-button theme-toggle" type="button" aria-label="切换深浅色主题" data-theme-toggle>
+            <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"></path>
+            </svg>
+            <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"></path>
+            </svg>
+          </button>
+          <a class="github-link" href="https://github.com/Vonfre/417switch" target="_blank" rel="noreferrer">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.69c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 7.01c.85 0 1.71.11 2.51.34 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"></path>
+            </svg>
+            <span>GitHub</span>
+          </a>
+          <button class="mobile-menu-button" type="button" aria-label="打开菜单" aria-expanded="false" data-menu-button>
+            <span></span><span></span><span></span>
+          </button>
+        </div>
+      </div>
+
+      <nav class="mobile-nav" aria-label="移动端导航" data-mobile-menu>
+        <a href="#why">为什么选择</a>
+        <a href="#choose">怎么选</a>
+        <a href="#features">功能</a>
+        <a href="#origin">项目关系</a>
+        <a href="https://github.com/Vonfre/417switch/releases/latest" target="_blank" rel="noreferrer">下载最新版</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="hero-grid" aria-hidden="true"></div>
+        <div class="hero-glow hero-glow-one" aria-hidden="true"></div>
+        <div class="hero-glow hero-glow-two" aria-hidden="true"></div>
+
+        <div class="container hero-layout">
+          <div class="hero-copy reveal">
+            <a class="eyebrow" href="#origin">
+              <span class="eyebrow-dot"></span>
+              基于 CC Switch 与 CSSwitch 实现
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+            </a>
+
+            <h1>
+              两种能力，<br />
+              <span>一个开关。</span>
+            </h1>
+            <p class="hero-lead">
+              417Switch 把成熟的 AI 编程配置管理与 Claude Science 科研工作流放进同一个桌面应用。少一点切换，多一点专注。
+            </p>
+
+            <div class="hero-actions">
+              <a class="button button-primary" href="https://github.com/Vonfre/417switch/releases/latest" target="_blank" rel="noreferrer">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"></path></svg>
+                下载 macOS 版
+              </a>
+              <a class="button button-secondary" href="https://github.com/Vonfre/417switch" target="_blank" rel="noreferrer">
+                查看源代码
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+              </a>
+            </div>
+
+            <div class="hero-meta" aria-label="产品特性">
+              <span><i></i>开源免费</span>
+              <span><i></i>本地优先</span>
+              <span><i></i>原生 macOS</span>
+            </div>
+          </div>
+
+          <div class="product-stage reveal reveal-delay">
+            <div class="stage-orbit orbit-one" aria-hidden="true"></div>
+            <div class="stage-orbit orbit-two" aria-hidden="true"></div>
+            <div class="app-window" aria-label="417Switch 产品界面示意图">
+              <div class="app-titlebar">
+                <div class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></div>
+                <div class="app-brand"><img src="./assets/logo.svg" alt="" />417Switch</div>
+                <div class="titlebar-actions" aria-hidden="true"><span></span><span></span></div>
+              </div>
+
+              <div class="app-body">
+                <aside class="app-sidebar">
+                  <button class="sidebar-item active" type="button" data-demo-tab="coding" aria-pressed="true">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14"></path></svg>
+                    <span>AI 编程</span>
+                  </button>
+                  <button class="sidebar-item" type="button" data-demo-tab="science" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.75 3h10.5A2 2 0 0 0 19 18l-5-9V3M8.5 15h7"></path></svg>
+                    <span>Claude Science</span>
+                  </button>
+                  <div class="sidebar-spacer"></div>
+                  <div class="sidebar-item muted">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06-2.83 2.83-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21h-4v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06-2.83-2.83.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3v-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06 2.83-2.83.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3h4v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06 2.83 2.83-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21v4h-.09A1.65 1.65 0 0 0 19.4 15Z"></path></svg>
+                    <span>设置</span>
+                  </div>
+                </aside>
+
+                <div class="app-content">
+                  <div class="demo-panel active" data-demo-panel="coding">
+                    <div class="content-heading">
+                      <div><span class="mini-label">AI CODING</span><h2>统一管理你的 AI 工具</h2></div>
+                      <button type="button" aria-label="添加供应商">+</button>
+                    </div>
+                    <div class="provider-card selected">
+                      <div class="provider-icon anthro">A</div>
+                      <div><strong>Claude Code</strong><span>当前使用 · Anthropic API</span></div>
+                      <b>已连接</b>
+                    </div>
+                    <div class="provider-card">
+                      <div class="provider-icon codex">◉</div>
+                      <div><strong>Codex</strong><span>OpenAI Responses</span></div>
+                      <b class="idle">待命</b>
+                    </div>
+                    <div class="provider-card">
+                      <div class="provider-icon gemini">✦</div>
+                      <div><strong>Gemini CLI</strong><span>Google AI Studio</span></div>
+                      <b class="idle">待命</b>
+                    </div>
+                    <div class="status-strip"><span></span>本地路由正常运行中 <b>12 ms</b></div>
+                  </div>
+
+                  <div class="demo-panel" data-demo-panel="science">
+                    <div class="content-heading">
+                      <div><span class="mini-label science-label">CLAUDE SCIENCE</span><h2>科研环境，随时就绪</h2></div>
+                      <button type="button" aria-label="新建工作区">+</button>
+                    </div>
+                    <div class="science-hero-card">
+                      <div class="science-symbol">λ</div>
+                      <div><strong>Science Runtime</strong><span>隔离环境已准备完成</span></div>
+                      <b>运行中</b>
+                    </div>
+                    <div class="metric-grid">
+                      <div><span>Skills</span><strong>146</strong><i>已就绪</i></div>
+                      <div><span>R / Python</span><strong>2</strong><i>环境</i></div>
+                      <div><span>工作区</span><strong>8</strong><i>已授权</i></div>
+                    </div>
+                    <div class="task-row"><span class="task-dot"></span><div><strong>跨物种单细胞注释</strong><small>最近打开 · 4 分钟前</small></div><span>继续 →</span></div>
+                    <div class="status-strip science-status"><span></span>Claude Science 服务可用 <b>Ready</b></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="stage-note note-left"><span>01</span>AI 工具管理</div>
+            <div class="stage-note note-right"><span>02</span>Science Runtime</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="trust-strip" id="why">
+        <div class="container trust-layout reveal">
+          <p>417Switch 不是另一套重复工具，而是把两个成熟方向真正接在一起。</p>
+          <div class="formula" aria-label="417Switch 项目组成">
+            <span class="formula-item"><i class="formula-cc">CC</i><b>CC Switch</b><small>AI 编程管理</small></span>
+            <strong>+</strong>
+            <span class="formula-item"><i class="formula-cs">CS</i><b>CSSwitch</b><small>Claude Science</small></span>
+            <strong>=</strong>
+            <span class="formula-item result"><img src="./assets/logo.svg" alt="" /><b>417Switch</b><small>融合体验</small></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section choose-section" id="choose">
+        <div class="container">
+          <div class="section-heading centered reveal">
+            <span class="section-kicker">该怎么选？</span>
+            <h2>按你的真实需求选择</h2>
+            <p>三个项目各有清晰边界。你不需要为用不到的能力增加复杂度。</p>
+          </div>
+
+          <div class="choice-grid">
+            <article class="choice-card reveal">
+              <div class="choice-topline"><span>只需要 AI 编程</span><i>轻量选择</i></div>
+              <div class="choice-icon cc-choice">CC</div>
+              <h3>选择 CC Switch</h3>
+              <p>如果你没有 Claude Science 的需求，只想管理 Claude Code、Codex、Gemini CLI 等 AI 编程工具，直接使用 CC Switch 就够了。</p>
+              <ul>
+                <li>供应商与模型切换</li>
+                <li>本地路由、MCP 与 Skills</li>
+                <li>用量、会话与配置管理</li>
+              </ul>
+              <a href="https://github.com/farion1231/cc-switch" target="_blank" rel="noreferrer">前往 CC Switch <span>↗</span></a>
+            </article>
+
+            <article class="choice-card reveal reveal-delay-small">
+              <div class="choice-topline"><span>只需要科研环境</span><i>专注选择</i></div>
+              <div class="choice-icon cs-choice">CS</div>
+              <h3>选择 CSSwitch</h3>
+              <p>如果你只想使用 Claude Science，不需要 AI 编程工具的统一切换与管理，可以直接使用 CSSwitch。</p>
+              <ul>
+                <li>Claude Science 专用入口</li>
+                <li>科研运行时与隔离环境</li>
+                <li>更聚焦的科学工作流</li>
+              </ul>
+              <a href="https://github.com/SuperJJ007/CSSwitch" target="_blank" rel="noreferrer">前往 CSSwitch <span>↗</span></a>
+            </article>
+
+            <article class="choice-card featured reveal reveal-delay">
+              <div class="choice-ribbon">推荐</div>
+              <div class="choice-topline"><span>两边都想要</span><i>融合选择</i></div>
+              <div class="choice-icon switch-choice"><img src="./assets/logo.svg" alt="" /></div>
+              <h3>选择 417Switch</h3>
+              <p>如果你既做 AI 编程，也希望随时进入 Claude Science，把两种工作流放在一个入口中，417Switch 就是完整选择。</p>
+              <ul>
+                <li>继承 CC Switch 的成熟能力</li>
+                <li>接入 CSSwitch 的 Science 体验</li>
+                <li>一次安装，一个统一入口</li>
+              </ul>
+              <a href="https://github.com/Vonfre/417switch/releases/latest" target="_blank" rel="noreferrer">下载 417Switch <span>↓</span></a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section features-section" id="features">
+        <div class="container">
+          <div class="section-heading split-heading reveal">
+            <div><span class="section-kicker">融合，但不混乱</span><h2>一个应用，两条清晰工作流</h2></div>
+            <p>保留各自擅长的部分，再用统一的产品体验把它们连接起来。</p>
+          </div>
+
+          <div class="feature-bento">
+            <article class="feature-card feature-large reveal">
+              <div class="feature-copy">
+                <span class="feature-number">01</span>
+                <h3>AI 编程配置，一处管理</h3>
+                <p>在 Claude Code、Codex、Gemini CLI 等工具之间管理供应商、模型、MCP、Skills 与本地路由。</p>
+              </div>
+              <div class="route-visual" aria-hidden="true">
+                <div class="route-source"><img src="./assets/logo.svg" alt="" /></div>
+                <div class="route-line line-a"></div><div class="route-line line-b"></div><div class="route-line line-c"></div>
+                <span class="route-node node-a">Claude</span><span class="route-node node-b">Codex</span><span class="route-node node-c">Gemini</span>
+              </div>
+            </article>
+
+            <article class="feature-card science-feature reveal reveal-delay-small">
+              <span class="feature-number">02</span>
+              <div class="flask" aria-hidden="true"><div class="flask-liquid"></div><span></span><span></span><span></span></div>
+              <h3>Claude Science，随开随用</h3>
+              <p>科研运行时、工具与工作区保持独立清晰，需要时一键进入。</p>
+            </article>
+
+            <article class="feature-card reveal">
+              <span class="feature-number">03</span>
+              <div class="local-icon" aria-hidden="true"><span></span><i></i></div>
+              <h3>本地优先</h3>
+              <p>关键配置与工作流留在你的设备上，控制权始终属于你。</p>
+            </article>
+
+            <article class="feature-card reveal reveal-delay-small">
+              <span class="feature-number">04</span>
+              <div class="open-icon" aria-hidden="true">&lt;/&gt;</div>
+              <h3>开源透明</h3>
+              <p>代码、构建与发布流程均可检查，也清楚标注上游项目来源。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section origin-section" id="origin">
+        <div class="container origin-layout">
+          <div class="origin-copy reveal">
+            <span class="section-kicker">项目关系</span>
+            <h2>站在优秀开源项目的肩膀上</h2>
+            <p>
+              417Switch 依靠 <a href="https://github.com/farion1231/cc-switch" target="_blank" rel="noreferrer">CC Switch</a> 与
+              <a href="https://github.com/SuperJJ007/CSSwitch" target="_blank" rel="noreferrer">CSSwitch</a> 实现。我们尊重并感谢两个上游项目的设计、代码与社区贡献。
+            </p>
+            <p>417Switch 的目标不是替代上游，而是为确实需要两种能力的用户提供一个融合版本。</p>
+            <a class="text-link" href="https://github.com/Vonfre/417switch" target="_blank" rel="noreferrer">查看源码与许可证 <span>↗</span></a>
+          </div>
+
+          <div class="origin-map reveal reveal-delay">
+            <div class="origin-card origin-cc"><span>UPSTREAM 01</span><strong>CC Switch</strong><small>AI coding configuration & routing</small></div>
+            <div class="origin-card origin-cs"><span>UPSTREAM 02</span><strong>CSSwitch</strong><small>Claude Science experience</small></div>
+            <div class="origin-connector"><i></i><i></i></div>
+            <div class="origin-card origin-result"><img src="./assets/logo.svg" alt="" /><div><span>FUSION</span><strong>417Switch</strong><small>One app. Two workflows.</small></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="download-section" id="download">
+        <div class="container download-card reveal">
+          <div class="download-grid" aria-hidden="true"></div>
+          <div class="download-mark" aria-hidden="true"><img src="./assets/logo.svg" alt="" /></div>
+          <div class="download-copy">
+            <span class="section-kicker light">准备好融合两种体验了吗？</span>
+            <h2>下载 417Switch</h2>
+            <p>一个应用，连接 AI 编程与 Claude Science。当前提供 macOS 版本。</p>
+          </div>
+          <div class="download-actions">
+            <a class="button download-button" href="https://github.com/Vonfre/417switch/releases/latest" target="_blank" rel="noreferrer">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"></path></svg>
+              获取最新版本
+            </a>
+            <small>免费 · 开源 · GitHub Releases</small>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-layout">
+        <div class="footer-brand">
+          <a class="brand" href="#top"><img src="./assets/logo.svg" alt="" width="34" height="34" /><span>417<span>Switch</span></span></a>
+          <p>AI 编程与 Claude Science 的融合入口。</p>
+        </div>
+        <div class="footer-links">
+          <div><strong>项目</strong><a href="https://github.com/Vonfre/417switch" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/Vonfre/417switch/releases" target="_blank" rel="noreferrer">Releases</a></div>
+          <div><strong>上游</strong><a href="https://github.com/farion1231/cc-switch" target="_blank" rel="noreferrer">CC Switch</a><a href="https://github.com/SuperJJ007/CSSwitch" target="_blank" rel="noreferrer">CSSwitch</a></div>
+        </div>
+      </div>
+      <div class="container footer-bottom">
+        <span>© <span data-year></span> 417Switch. Open source under the Apache 2.0 License.</span>
+        <a href="https://417switch.io/">417switch.io</a>
+      </div>
+    </footer>
+
+    <script src="./script.js" defer></script>
+  </body>
+</html>

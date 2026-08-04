@@ -3,11 +3,23 @@
 此目录保存 417Switch 的完整可维护源码和已构建的 macOS 应用，与原始
 `cc-switch`、`CSSwitch` 仓库分开。
 
+## 官方网站
+
+- 网站源码：`website/`
+- 官方域名：[417switch.io](https://417switch.io/)
+- GitHub Pages：推送到 `main` 后由 `.github/workflows/pages.yml` 自动部署
+
+417Switch 基于 [CC Switch](https://github.com/farion1231/cc-switch) 与
+[CSSwitch](https://github.com/SuperJJ007/CSSwitch) 实现：没有 Claude Science
+需求时可直接使用 CC Switch；只想使用 Claude Science 时可选择 CSSwitch；
+需要两种能力的融合体验时选择 417Switch。
+
 ## 目录结构
 
 - `source/`：417Switch 源码、前端资源、Rust/Tauri 后端和依赖锁文件。
 - `artifacts/macos/417Switch.app`：当前验证可用的 macOS 应用。
 - `scripts/build_macos.sh`：从 `source/` 重新构建并更新 macOS 成品。
+- `website/`：417switch.io 的静态网站源码。
 
 源码副本未包含以下可重新生成内容：
 

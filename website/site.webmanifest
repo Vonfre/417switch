@@ -1,0 +1,17 @@
+{
+  "name": "417Switch",
+  "short_name": "417Switch",
+  "description": "AI 编程与 Claude Science 的融合入口",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ece6dc",
+  "theme_color": "#ece6dc",
+  "icons": [
+    {
+      "src": "/assets/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
