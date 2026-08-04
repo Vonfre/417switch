@@ -6,7 +6,7 @@
 ## 官方网站
 
 - 网站源码：`website/`
-- 官方域名：[417switch.io](https://417switch.io/)
+- 在线网站：[vonfre.github.io/417switch](https://vonfre.github.io/417switch/)
 - GitHub Pages：推送到 `main` 后由 `.github/workflows/pages.yml` 自动部署
 
 417Switch 基于 [CC Switch](https://github.com/farion1231/cc-switch) 与
@@ -19,7 +19,7 @@
 - `source/`：417Switch 源码、前端资源、Rust/Tauri 后端和依赖锁文件。
 - `artifacts/macos/417Switch.app`：当前验证可用的 macOS 应用。
 - `scripts/build_macos.sh`：从 `source/` 重新构建并更新 macOS 成品。
-- `website/`：417switch.io 的静态网站源码。
+- `website/`：GitHub Pages 静态网站源码。
 
 源码副本未包含以下可重新生成内容：
 

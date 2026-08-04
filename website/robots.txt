@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://417switch.io/sitemap.xml
+Sitemap: https://vonfre.github.io/417switch/sitemap.xml
