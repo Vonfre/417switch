@@ -1,3 +1,4 @@
+# Publish the static 417Switch website through GitHub Pages.
 name: Deploy website to GitHub Pages
 
 on:
