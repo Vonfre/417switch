@@ -45,9 +45,9 @@ const HKDF_INFO: &[u8] = b"operon:aes-256-gcm:oauth";
 const AAD: &[u8] = b"v2:oauth";
 const MODELS_CREATED_AT: &str = "2026-01-01T00:00:00Z";
 const SCIENCE_LAUNCH_MODE_ZH: &str =
-    "real-home-explicit-config-science-provider-zh-cn-v8-agent-errors-auto-update";
+    "real-home-explicit-config-science-provider-zh-cn-v9-auto-update-runtime-compatible";
 const SCIENCE_LAUNCH_MODE_ORIGINAL: &str =
-    "real-home-explicit-config-science-provider-original-v1-auto-update";
+    "real-home-explicit-config-science-provider-original-v2-auto-update-runtime-compatible";
 const SCIENCE_ZH_PATCH_VERSION: &str = "zh-cn-v6";
 const BUN_TRAILER: &[u8] = b"\n---- Bun! ----\n";
 const SCIENCE_ZH_PATCH_SENTINEL: &str = "417switch-science-zh-cn-v6";
@@ -692,25 +692,29 @@ fn chinese_patch_enabled() -> bool {
     crate::settings::get_settings().science_chinese_patch_enabled
 }
 
-fn expected_launch_mode(chinese_patch: bool) -> &'static str {
-    if chinese_patch {
+fn expected_launch_mode(chinese_patch: bool, runtime: &RuntimeRecord) -> String {
+    let mode = if chinese_patch {
         SCIENCE_LAUNCH_MODE_ZH
     } else {
         SCIENCE_LAUNCH_MODE_ORIGINAL
-    }
+    };
+    // Science can replace the managed runtime in place when it applies an
+    // official automatic update.  Bind the launch marker to the verified
+    // binary digest so the next Start refreshes version-specific assets.
+    format!("{mode}:{}", runtime.sha256)
 }
 
-fn launch_mode_is_current() -> bool {
-    let expected = expected_launch_mode(chinese_patch_enabled());
+fn launch_mode_is_current(runtime: &RuntimeRecord) -> bool {
+    let expected = expected_launch_mode(chinese_patch_enabled(), runtime);
     std::fs::read_to_string(launch_mode_path())
         .map(|value| value.trim() == expected)
         .unwrap_or(false)
 }
 
-fn save_launch_mode(chinese_patch: bool) -> Result<(), String> {
+fn save_launch_mode(chinese_patch: bool, runtime: &RuntimeRecord) -> Result<(), String> {
     safe_write(
         &launch_mode_path(),
-        format!("{}\n", expected_launch_mode(chinese_patch)).as_bytes(),
+        format!("{}\n", expected_launch_mode(chinese_patch, runtime)).as_bytes(),
         0o600,
     )
 }
@@ -1127,9 +1131,16 @@ fn snapshot_updated_runtime(source: &Path) -> Result<PathBuf, String> {
     let target = root.join(format!("claude-science-{digest}"));
     if target.exists() {
         let existing = validate_executable(&target, true)?;
-        if sha256(&existing) != digest {
-            return Err("Science runtime snapshot 文件名与内容不一致".into());
+        if sha256(&existing) == digest {
+            return Ok(target);
         }
+        // Automatic updates are permitted for the private managed runtime.
+        // The updater may replace the executable in place before 417Switch
+        // can mint its next content-addressed name.  Accept that only after
+        // independently verifying the new executable's official identity;
+        // build_runtime records its new version and digest, which invalidates
+        // stale localized-asset and launch markers.
+        validate_official_updated_identity(&target)?;
         return Ok(target);
     }
     safe_write(&target, &bytes, 0o500)?;
@@ -1209,7 +1220,21 @@ fn save_runtime(runtime: &RuntimeRecord) -> Result<(), String> {
 fn load_runtime() -> Option<RuntimeRecord> {
     let runtime: RuntimeRecord =
         serde_json::from_slice(&std::fs::read(runtime_record_path()).ok()?).ok()?;
-    runtime_is_current(&runtime).then_some(runtime)
+    if runtime_is_current(&runtime) {
+        return Some(runtime);
+    }
+    if !matches!(runtime.source, RuntimeSource::OfficialUpdated) {
+        return None;
+    }
+
+    // A signed Science auto-update may have replaced our private managed copy
+    // without changing its path.  Re-read its identity and version instead of
+    // mistaking the stale recorded digest for a missing installation.
+    validate_official_updated_identity(&runtime.path).ok()?;
+    let refreshed =
+        build_runtime(runtime.path.clone(), RuntimeSource::OfficialUpdated, true).ok()?;
+    save_runtime(&refreshed).ok()?;
+    Some(refreshed)
 }
 
 fn read_u32_le(bytes: &[u8], offset: usize) -> Result<u32, String> {
@@ -2198,7 +2223,7 @@ pub async fn status(state: &AppState) -> ScienceStatus {
     // Science 0.1.25 can report `running: false` while its detached daemon is
     // healthy and listening. UI status is intentionally a short HTTP probe;
     // start/open/stop keep the stronger runtime and PID identity checks.
-    let launch_mode_current = launch_mode_is_current();
+    let launch_mode_current = runtime.as_ref().is_some_and(launch_mode_is_current);
     let running = installed && healthy && launch_mode_current;
     ScienceStatus {
         supported: true,
@@ -2212,7 +2237,7 @@ pub async fn status(state: &AppState) -> ScienceStatus {
         message: if !installed {
             Some("未找到 Claude Science".to_string())
         } else if healthy && !launch_mode_current {
-            Some("Claude Science 需要重启一次以启用独立 Provider 路由".to_string())
+            Some("Claude Science 已自动更新或兼容资源已变化；点击启动将自动重启并加载当前版本兼容资源".to_string())
         } else {
             None
         },
@@ -2231,7 +2256,12 @@ async fn ensure_science_proxy(state: &AppState) -> Result<u16, String> {
 }
 
 pub async fn restore_proxy_if_running(state: &AppState) -> Result<bool, String> {
-    if !cfg!(target_os = "macos") || !launch_mode_is_current() || !health_ready(SCIENCE_PORT).await
+    let Some(runtime) = load_runtime() else {
+        return Ok(false);
+    };
+    if !cfg!(target_os = "macos")
+        || !launch_mode_is_current(&runtime)
+        || !health_ready(SCIENCE_PORT).await
     {
         return Ok(false);
     }
@@ -2257,7 +2287,7 @@ pub async fn start(app: &tauri::AppHandle, state: &AppState) -> Result<ScienceSt
 
     if let Some(existing) = load_runtime() {
         if managed_process(&existing).is_some() && health_ready(SCIENCE_PORT).await {
-            if launch_mode_is_current() {
+            if launch_mode_is_current(&existing) {
                 let url = science_url(&existing)?;
                 open_science_surface(app, &url)?;
                 return Ok(ScienceStartResult {
@@ -2352,7 +2382,7 @@ pub async fn start(app: &tauri::AppHandle, state: &AppState) -> Result<ScienceSt
     if !ready {
         return Err("Claude Science 启动后健康检查超时".into());
     }
-    save_launch_mode(chinese_patch)?;
+    save_launch_mode(chinese_patch, &runtime)?;
     let url = science_url(&runtime)?;
     open_science_surface(app, &url)?;
     Ok(ScienceStartResult {
@@ -2756,10 +2786,30 @@ mod tests {
     }
 
     #[test]
-    fn science_launch_mode_tracks_chinese_patch_setting() {
-        assert_ne!(expected_launch_mode(true), expected_launch_mode(false));
-        assert!(expected_launch_mode(true).contains("zh-cn"));
-        assert!(expected_launch_mode(false).contains("original"));
+    fn science_launch_mode_tracks_chinese_patch_setting_and_runtime_digest() {
+        let first = RuntimeRecord {
+            path: PathBuf::from("/tmp/claude-science-a"),
+            source: RuntimeSource::OfficialUpdated,
+            version: "claude-science 0.1.25".into(),
+            sha256: "a".repeat(64),
+        };
+        let second = RuntimeRecord {
+            path: first.path.clone(),
+            source: RuntimeSource::OfficialUpdated,
+            version: "claude-science 0.1.27".into(),
+            sha256: "b".repeat(64),
+        };
+        assert_ne!(
+            expected_launch_mode(true, &first),
+            expected_launch_mode(false, &first)
+        );
+        assert_ne!(
+            expected_launch_mode(true, &first),
+            expected_launch_mode(true, &second)
+        );
+        assert!(expected_launch_mode(true, &first).contains("zh-cn"));
+        assert!(expected_launch_mode(false, &first).contains("original"));
+        assert!(expected_launch_mode(true, &first).ends_with(&first.sha256));
     }
 
     #[test]
