@@ -5,13 +5,14 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.19.2] - 2026-08-10
+## [3.19.3] - 2026-08-19
 
 ### Fixed
 
 - Restored the Claude Science start control after an official automatic update. 417Switch now revalidates the updated managed runtime's official identifier and Team ID, refreshes its recorded version and SHA-256, and no longer reports it as missing.
 - Bound the managed launch marker to the verified Science runtime digest. When Science updates itself, the next Start automatically restarts the isolated daemon and rebuilds the version-specific 417Switch compatibility assets (including the Simplified Chinese patch) before opening it.
 - Kept Claude Science automatic updates enabled. Unsigned, unexpected, or permission-unsafe executables remain fail-closed and cannot be launched.
+- Added friendly DeepSeek model display names for Claude Science while preserving the real upstream model IDs used for requests.
 
 ## [3.19.1] - 2026-08-04
 

@@ -2109,9 +2109,11 @@ fn provider_model_entries(provider: &Provider) -> Vec<(&'static str, String)> {
     };
     let display = |model_key: &str, name_key: &str, fallback: Option<&str>| {
         let target = value(model_key).or(fallback)?;
-        Some(value(name_key)
-            .map(str::to_string)
-            .unwrap_or_else(|| default_model_display_name(target)))
+        Some(
+            value(name_key)
+                .map(str::to_string)
+                .unwrap_or_else(|| default_model_display_name(target)),
+        )
     };
 
     // Claude Science only exposes model IDs beginning with `claude-`. Use the
