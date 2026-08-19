@@ -2083,6 +2083,17 @@ fn valid_model_text(value: &str) -> Option<&str> {
         .then_some(value)
 }
 
+fn default_model_display_name(model: &str) -> String {
+    match model.trim().to_ascii_lowercase().as_str() {
+        "deepseek-v4-flash" => "DeepSeek V4 Flash".into(),
+        "deepseek-v4-pro" => "DeepSeek V4 Pro".into(),
+        "deepseek-v4-ultra" => "DeepSeek V4 Ultra".into(),
+        "deepseek-chat" => "DeepSeek Chat".into(),
+        "deepseek-reasoner" => "DeepSeek Reasoner".into(),
+        _ => model.to_string(),
+    }
+}
+
 fn provider_model_entries(provider: &Provider) -> Vec<(&'static str, String)> {
     let Some(env) = provider
         .settings_config
@@ -2098,7 +2109,9 @@ fn provider_model_entries(provider: &Provider) -> Vec<(&'static str, String)> {
     };
     let display = |model_key: &str, name_key: &str, fallback: Option<&str>| {
         let target = value(model_key).or(fallback)?;
-        Some(value(name_key).unwrap_or(target).to_string())
+        Some(value(name_key)
+            .map(str::to_string)
+            .unwrap_or_else(|| default_model_display_name(target)))
     };
 
     // Claude Science only exposes model IDs beginning with `claude-`. Use the
@@ -2904,6 +2917,28 @@ mod tests {
             .is_some_and(|id| id.starts_with("claude-"))));
         assert_eq!(response["first_id"], "claude-sonnet-4-6");
         assert_eq!(response["last_id"], "claude-fable-5");
+    }
+
+    #[test]
+    fn provider_model_catalog_uses_friendly_deepseek_names_without_changing_ids() {
+        let provider = Provider::with_id(
+            "cs-deepseek".into(),
+            "cs-deepseek".into(),
+            json!({
+                "env": {
+                    "ANTHROPIC_MODEL": "deepseek-v4-flash",
+                    "ANTHROPIC_DEFAULT_SONNET_MODEL": "deepseek-v4-flash",
+                    "ANTHROPIC_DEFAULT_OPUS_MODEL": "deepseek-v4-pro",
+                    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "deepseek-v4-flash"
+                }
+            }),
+            None,
+        );
+        let data = model_list_response(&provider)["data"].clone();
+        assert_eq!(data[0]["id"], "claude-sonnet-4-6");
+        assert_eq!(data[0]["display_name"], "DeepSeek V4 Flash");
+        assert_eq!(data[1]["id"], "claude-opus-4-8");
+        assert_eq!(data[1]["display_name"], "DeepSeek V4 Pro");
     }
 
     #[test]
