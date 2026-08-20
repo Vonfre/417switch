@@ -5,6 +5,13 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.19.4] - 2026-08-20
+
+### Fixed
+
+- Claude Science now exposes reversible `claude-science-*` aliases for custom upstream model names, including `claude science-5.6sol`, and maps those aliases back to the exact configured model before forwarding.
+- Existing Claude Science role aliases remain available for compatibility with older Science runtimes.
+
 ## [3.19.3] - 2026-08-19
 
 ### Fixed

@@ -5397,7 +5397,7 @@ dependencies = [
 
 [[package]]
 name = "switch417"
-version = "3.19.3"
+version = "3.19.4"
 dependencies = [
  "aes-gcm",
  "aho-corasick",

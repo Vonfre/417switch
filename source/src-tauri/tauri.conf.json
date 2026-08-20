@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "417Switch",
   "mainBinaryName": "417switch",
-  "version": "3.19.3",
+  "version": "3.19.4",
   "identifier": "com.switch417.desktop",
   "build": {
     "frontendDist": "../dist",

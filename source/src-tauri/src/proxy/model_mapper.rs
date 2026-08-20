@@ -16,6 +16,37 @@ pub struct ModelMapping {
     pub default_model: Option<String>,
 }
 
+/// Build the model id that Claude Science can safely expose for an arbitrary
+/// upstream model name. Science normalizes away non-`claude-` ids, so the
+/// gateway must keep a reversible alias instead of exposing the raw name.
+pub fn science_model_alias(model: &str) -> String {
+    let mut slug = String::with_capacity(model.len());
+    let mut pending_separator = false;
+    for ch in model.trim().chars() {
+        if ch.is_ascii_alphanumeric() {
+            if pending_separator && !slug.is_empty() {
+                slug.push('-');
+            }
+            pending_separator = false;
+            slug.push(ch.to_ascii_lowercase());
+        } else {
+            pending_separator = true;
+        }
+    }
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+    let slug = slug
+        .strip_prefix("claude-science-")
+        .unwrap_or(&slug)
+        .to_string();
+    if slug.is_empty() {
+        "claude-science-model".to_string()
+    } else {
+        format!("claude-science-{slug}")
+    }
+}
+
 impl ModelMapping {
     /// 从 Provider 配置中提取模型映射
     pub fn from_provider(provider: &Provider) -> Self {
@@ -68,6 +99,24 @@ impl ModelMapping {
     /// 根据原始模型名称获取映射后的模型
     pub fn map_model(&self, original_model: &str) -> String {
         let model_lower = original_model.to_lowercase();
+
+        // Science-facing custom aliases are exact routes. Check them before
+        // role-name heuristics because an upstream model may itself contain
+        // words such as "sonnet" or "opus".
+        for configured in [
+            self.haiku_model.as_deref(),
+            self.sonnet_model.as_deref(),
+            self.opus_model.as_deref(),
+            self.fable_model.as_deref(),
+            self.default_model.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if science_model_alias(configured).eq_ignore_ascii_case(original_model.trim()) {
+                return configured.to_string();
+            }
+        }
 
         // 1. 按模型类型匹配
         if model_lower.contains("fable") {
@@ -199,6 +248,31 @@ mod tests {
             icon_color: None,
             in_failover_queue: false,
         }
+    }
+
+    #[test]
+    fn science_model_alias_is_safe_and_stable() {
+        assert_eq!(
+            science_model_alias("claude science-5.6sol"),
+            "claude-science-5-6sol"
+        );
+    }
+
+    #[test]
+    fn custom_science_alias_maps_to_its_exact_upstream_model() {
+        let provider = Provider {
+            settings_config: json!({
+                "env": {
+                    "ANTHROPIC_MODEL": "claude science-5.6sol",
+                    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude science-5.6sol"
+                }
+            }),
+            ..create_provider_without_mapping()
+        };
+        let alias = science_model_alias("claude science-5.6sol");
+        let (body, _, mapped) = apply_model_mapping(json!({"model": alias}), &provider);
+        assert_eq!(body["model"], "claude science-5.6sol");
+        assert_eq!(mapped.as_deref(), Some("claude science-5.6sol"));
     }
 
     fn create_provider_without_mapping() -> Provider {

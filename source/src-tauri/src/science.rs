@@ -2094,7 +2094,7 @@ fn default_model_display_name(model: &str) -> String {
     }
 }
 
-fn provider_model_entries(provider: &Provider) -> Vec<(&'static str, String)> {
+fn provider_model_entries(provider: &Provider) -> Vec<(String, String)> {
     let Some(env) = provider
         .settings_config
         .get("env")
@@ -2142,15 +2142,42 @@ fn provider_model_entries(provider: &Provider) -> Vec<(&'static str, String)> {
         fable_fallback,
     );
 
-    [
+    let mut entries = Vec::new();
+    let mut add_entry = |id: String, name: String| {
+        if !entries.iter().any(|(existing, _)| existing == &id) {
+            entries.push((id, name));
+        }
+    };
+
+    for (id, name) in [
         ("claude-sonnet-4-6", sonnet),
         ("claude-opus-4-8", opus),
         ("claude-haiku-4-5", haiku),
         ("claude-fable-5", fable),
+    ] {
+        if let Some(name) = name {
+            add_entry(id.to_string(), name);
+        }
+    }
+
+    // Keep a stable, reversible selector for custom model names. The fixed
+    // role aliases above remain for Science versions that only know those
+    // names; newer versions can select the exact custom model directly.
+    for model in [
+        value("ANTHROPIC_MODEL"),
+        value("ANTHROPIC_DEFAULT_SONNET_MODEL"),
+        value("ANTHROPIC_DEFAULT_OPUS_MODEL"),
+        value("ANTHROPIC_DEFAULT_HAIKU_MODEL"),
+        value("ANTHROPIC_DEFAULT_FABLE_MODEL"),
     ]
     .into_iter()
-    .filter_map(|(id, name)| name.map(|name| (id, name)))
-    .collect()
+    .flatten()
+    {
+        let alias = crate::proxy::model_mapper::science_model_alias(model);
+        add_entry(alias, default_model_display_name(model));
+    }
+
+    entries
 }
 
 fn apply_provider_model_env(command: &mut Command, provider: &Provider) {
@@ -2196,8 +2223,8 @@ fn apply_science_serve_args(command: &mut Command, assets_root: Option<&Path>) {
 
 pub fn model_list_response(provider: &Provider) -> Value {
     let entries = provider_model_entries(provider);
-    let first_id = entries.first().map(|(id, _)| *id);
-    let last_id = entries.last().map(|(id, _)| *id);
+    let first_id = entries.first().map(|(id, _)| id.clone());
+    let last_id = entries.last().map(|(id, _)| id.clone());
     json!({
         "data": entries
             .into_iter()
@@ -2909,7 +2936,7 @@ mod tests {
         );
         let response = model_list_response(&provider);
         let data = response["data"].as_array().unwrap();
-        assert_eq!(data.len(), 4);
+        assert!(data.len() >= 4);
         assert_eq!(data[0]["id"], "claude-sonnet-4-6");
         assert_eq!(data[0]["display_name"], "model-a");
         assert_eq!(data[1]["id"], "claude-opus-4-8");
@@ -2918,7 +2945,26 @@ mod tests {
             .as_str()
             .is_some_and(|id| id.starts_with("claude-"))));
         assert_eq!(response["first_id"], "claude-sonnet-4-6");
-        assert_eq!(response["last_id"], "claude-fable-5");
+        assert_eq!(response["last_id"], "claude-science-model-a");
+    }
+
+    #[test]
+    fn provider_model_catalog_exposes_a_reversible_custom_science_alias() {
+        let provider = Provider::with_id(
+            "test".into(),
+            "Test".into(),
+            json!({"env": {"ANTHROPIC_MODEL": "claude science-5.6sol"}}),
+            None,
+        );
+        let data = model_list_response(&provider)["data"]
+            .as_array()
+            .unwrap()
+            .clone();
+        let custom = data
+            .iter()
+            .find(|entry| entry["id"] == "claude-science-5-6sol")
+            .expect("custom Science alias");
+        assert_eq!(custom["display_name"], "claude science-5.6sol");
     }
 
     #[test]
