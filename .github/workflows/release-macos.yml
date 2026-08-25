@@ -76,6 +76,15 @@ jobs:
           releaseBody: |
             ## 417Switch ${{ github.ref_name }}
 
+            ### 主要更新
+
+            - 新增 Pi 原生支持，以及 Codex 多账号 OAuth 管理
+            - 支持 Claude Hosted WebSearch 与 Codex Alpha Search
+            - 加强备份、恢复、WebDAV/S3 同步和会话用量去重
+            - 合并新版供应商、模型目录、推理档位与输入法修复
+            - 保留 Claude Science、中文补丁、自定义模型别名与 Responses 兼容增强
+            - 数据库升级至 schema v18，兼容旧 417Switch 与上游 v17 数据
+
             ### macOS 下载
 
             下载 Release 中的 universal `.dmg`，同时支持 Apple Silicon 和 Intel Mac。
