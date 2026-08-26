@@ -144,8 +144,47 @@ use std::{fmt, sync::Arc};
 use tauri::image::Image;
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::RunEvent;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, LogicalSize, Manager};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+
+const MAIN_WINDOW_DEFAULT_WIDTH: f64 = 1200.0;
+const MAIN_WINDOW_DEFAULT_HEIGHT: f64 = 760.0;
+const MAIN_WINDOW_MIN_WIDTH: f64 = 1000.0;
+const MAIN_WINDOW_MIN_HEIGHT: f64 = 680.0;
+
+fn main_window_size_needs_repair(width: f64, height: f64) -> bool {
+    width < MAIN_WINDOW_MIN_WIDTH || height < MAIN_WINDOW_MIN_HEIGHT
+}
+
+fn normalize_main_window_geometry(window: &tauri::WebviewWindow) {
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    let repaired_size = window
+        .inner_size()
+        .map(|size| size.to_logical::<f64>(scale_factor))
+        .is_ok_and(|size| main_window_size_needs_repair(size.width, size.height));
+
+    if let Err(error) = window.set_min_size(Some(LogicalSize::new(
+        MAIN_WINDOW_MIN_WIDTH,
+        MAIN_WINDOW_MIN_HEIGHT,
+    ))) {
+        log::warn!("设置主窗口最小尺寸失败: {error}");
+    }
+
+    if repaired_size {
+        if let Err(error) = window.set_size(LogicalSize::new(
+            MAIN_WINDOW_DEFAULT_WIDTH,
+            MAIN_WINDOW_DEFAULT_HEIGHT,
+        )) {
+            log::warn!("恢复主窗口默认尺寸失败: {error}");
+        } else {
+            let _ = window.center();
+            log::info!("已修复过小的主窗口恢复尺寸并重新居中");
+        }
+    } else if window.current_monitor().ok().flatten().is_none() {
+        let _ = window.center();
+        log::info!("主窗口恢复位置不在当前显示器，已重新居中");
+    }
+}
 
 #[cfg(target_os = "windows")]
 fn set_windows_app_user_model_id(app: &tauri::AppHandle) {
@@ -1401,6 +1440,7 @@ pub fn run() {
             // 静默启动：根据设置决定是否显示主窗口
             let settings = crate::settings::get_settings();
             if let Some(window) = app.get_webview_window("main") {
+                normalize_main_window_geometry(&window);
                 // 在窗口首次显示前同步装饰状态，避免前端加载后再切换导致标题栏闪烁
                 // 仅 Linux 生效：解决 Wayland 下系统窗口按钮不可用的问题
                 #[cfg(target_os = "linux")]
@@ -2362,11 +2402,19 @@ pub fn restart_process(app_handle: &tauri::AppHandle) -> ! {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_exit_request, enabled_proxy_apps_on_startup, redact_url_for_log,
-        redact_url_for_log_with_secrets, redact_url_origin_for_log, runtime_log_level_allows,
-        ExitRequestAction,
+        classify_exit_request, enabled_proxy_apps_on_startup, main_window_size_needs_repair,
+        redact_url_for_log, redact_url_for_log_with_secrets, redact_url_origin_for_log,
+        runtime_log_level_allows, ExitRequestAction,
     };
     use crate::database::Database;
+
+    #[test]
+    fn main_window_repairs_only_sizes_that_cannot_show_the_full_ui() {
+        assert!(main_window_size_needs_repair(900.0, 600.0));
+        assert!(main_window_size_needs_repair(1200.0, 640.0));
+        assert!(!main_window_size_needs_repair(1000.0, 680.0));
+        assert!(!main_window_size_needs_repair(1440.0, 900.0));
+    }
 
     #[test]
     fn log_url_redaction_strips_credentials_and_query_keeps_path() {

@@ -1668,6 +1668,41 @@ async fn health_ready(port: u16) -> bool {
         .is_some_and(|response| response.status().is_success())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExistingScienceAction {
+    Open,
+    WaitForReady,
+    Restart,
+    Ignore,
+}
+
+fn existing_science_action(
+    managed: bool,
+    healthy: bool,
+    launch_mode_current: bool,
+) -> ExistingScienceAction {
+    match (managed, healthy, launch_mode_current) {
+        (true, true, true) => ExistingScienceAction::Open,
+        (true, false, true) => ExistingScienceAction::WaitForReady,
+        (true, _, false) => ExistingScienceAction::Restart,
+        (false, _, _) => ExistingScienceAction::Ignore,
+    }
+}
+
+async fn wait_for_managed_science_ready(runtime: &RuntimeRecord) -> bool {
+    for _ in 0..240 {
+        // The detached launcher can exit a moment before the daemon has
+        // written its lock record. Keep the registration grace period inside
+        // the same readiness wait instead of failing on the first missing
+        // record.
+        if managed_process(runtime).is_some() && health_ready(SCIENCE_PORT).await {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    false
+}
+
 fn process_matches_runtime(pid: u32, runtime: &RuntimeRecord) -> bool {
     if pid == 0 || !runtime_is_current(runtime) {
         return false;
@@ -2328,8 +2363,10 @@ pub async fn start(app: &tauri::AppHandle, state: &AppState) -> Result<ScienceSt
     let proxy_base = format!("http://127.0.0.1:{proxy_port}/science");
 
     if let Some(existing) = load_runtime() {
-        if managed_process(&existing).is_some() && health_ready(SCIENCE_PORT).await {
-            if launch_mode_is_current(&existing) {
+        let managed = managed_process(&existing).is_some();
+        let healthy = managed && health_ready(SCIENCE_PORT).await;
+        match existing_science_action(managed, healthy, launch_mode_is_current(&existing)) {
+            ExistingScienceAction::Open => {
                 let url = science_url(&existing)?;
                 open_science_surface(app, &url)?;
                 return Ok(ScienceStartResult {
@@ -2339,10 +2376,33 @@ pub async fn start(app: &tauri::AppHandle, state: &AppState) -> Result<ScienceSt
                     runtime_version: existing.version,
                 });
             }
-            // Older 417Switch builds launched Science with the isolated HOME.
-            // Restart once so the folder picker sees the real HOME while the
-            // explicit data/config paths continue to isolate login and state.
-            stop().await?;
+            ExistingScienceAction::WaitForReady => {
+                // A restarted 417Switch can observe the detached daemon after
+                // it has claimed the ports but before `/health` is ready. It
+                // is still our process, so adopt it instead of reporting that
+                // an unrelated process owns the isolation ports.
+                if wait_for_managed_science_ready(&existing).await {
+                    let url = science_url(&existing)?;
+                    open_science_surface(app, &url)?;
+                    return Ok(ScienceStartResult {
+                        url,
+                        provider_name: provider.name,
+                        runtime_source: existing.source.label().to_string(),
+                        runtime_version: existing.version,
+                    });
+                }
+                if managed_process(&existing).is_some() {
+                    return Err("417Switch 管理的 Claude Science 仍在启动，健康检查暂未就绪".into());
+                }
+            }
+            ExistingScienceAction::Restart => {
+                // Older 417Switch builds launched Science with the isolated
+                // HOME. Restart once so the folder picker sees the real HOME
+                // while explicit data/config paths keep login and state
+                // isolated.
+                stop().await?;
+            }
+            ExistingScienceAction::Ignore => {}
         }
     }
     if port_accepts_tcp(SCIENCE_PORT) || port_accepts_tcp(SCIENCE_PREVIEW_PORT) {
@@ -2413,15 +2473,7 @@ pub async fn start(app: &tauri::AppHandle, state: &AppState) -> Result<ScienceSt
     }
     save_runtime(&runtime)?;
 
-    let mut ready = false;
-    for _ in 0..240 {
-        tokio::time::sleep(Duration::from_millis(250)).await;
-        if health_ready(SCIENCE_PORT).await && managed_process(&runtime).is_some() {
-            ready = true;
-            break;
-        }
-    }
-    if !ready {
+    if !wait_for_managed_science_ready(&runtime).await {
         return Err("Claude Science 启动后健康检查超时".into());
     }
     save_launch_mode(chinese_patch, &runtime)?;
@@ -2532,6 +2584,26 @@ pub async fn stop() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn managed_starting_science_is_waited_for_instead_of_treated_as_port_conflict() {
+        assert_eq!(
+            existing_science_action(true, false, true),
+            ExistingScienceAction::WaitForReady
+        );
+        assert_eq!(
+            existing_science_action(true, true, true),
+            ExistingScienceAction::Open
+        );
+        assert_eq!(
+            existing_science_action(true, false, false),
+            ExistingScienceAction::Restart
+        );
+        assert_eq!(
+            existing_science_action(false, false, true),
+            ExistingScienceAction::Ignore
+        );
+    }
 
     #[test]
     fn official_updater_identity_accepts_only_known_exact_variants() {

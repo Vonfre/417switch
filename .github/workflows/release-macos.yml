@@ -78,12 +78,10 @@ jobs:
 
             ### 主要更新
 
-            - 新增 Pi 原生支持，以及 Codex 多账号 OAuth 管理
-            - 支持 Claude Hosted WebSearch 与 Codex Alpha Search
-            - 加强备份、恢复、WebDAV/S3 同步和会话用量去重
-            - 合并新版供应商、模型目录、推理档位与输入法修复
-            - 保留 Claude Science、中文补丁、自定义模型别名与 Responses 兼容增强
-            - 数据库升级至 schema v18，兼容旧 417Switch 与上游 v17 数据
+            - 修复重启 417Switch 后将正在启动的受管 Science 实例误判为端口占用
+            - 自动等待并接管已经绑定隔离端口、但健康检查仍在初始化的 Science
+            - 修复旧窗口状态导致主界面过小、内容展示不全或恢复到离屏位置
+            - 主窗口默认尺寸调整为 1200×760，最小尺寸调整为 1000×680
 
             ### macOS 下载
 

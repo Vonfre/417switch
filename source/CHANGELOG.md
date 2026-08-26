@@ -5,6 +5,18 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.20.1] - 2026-08-26
+
+### Fixed
+
+- Reattach to a 417Switch-managed Claude Science daemon that has already
+  claimed the isolation ports but is still completing its health startup,
+  instead of misreporting the daemon as an unrelated process after 417Switch
+  is restarted.
+- Repair restored main-window geometry when an older saved state is too small
+  for the current interface or no longer belongs to an attached display. The
+  default window is now 1200×760 with a 1000×680 minimum.
+
 ## [3.20.0] - 2026-08-25
 
 417Switch now incorporates the CC Switch v3.20.0 release line while preserving
