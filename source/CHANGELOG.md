@@ -5,6 +5,16 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.20.2] - 2026-08-27
+
+### Fixed
+
+- Open the healthy Claude Science login surface through macOS Launch Services
+  directly, avoiding a pending opener call that could leave 417Switch showing
+  “starting” after the daemon was already ready.
+- Poll Science status while startup is pending and expose the Open action as
+  soon as the managed daemon is confirmed healthy.
+
 ## [3.20.1] - 2026-08-26
 
 ### Fixed

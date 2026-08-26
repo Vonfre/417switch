@@ -7,18 +7,13 @@ import { Button } from "@/components/ui/button";
 import { scienceApi } from "@/lib/api";
 import { extractErrorMessage } from "@/utils/errorUtils";
 
+import { isScienceControlPending } from "./scienceControlState";
+
 const scienceKey = ["scienceStatus"] as const;
 
 export function ScienceControl() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { data: status, isLoading } = useQuery({
-    queryKey: scienceKey,
-    queryFn: scienceApi.getStatus,
-    refetchInterval: (query) => (query.state.data?.running ? 3000 : 15000),
-    placeholderData: (previous) => previous,
-  });
-
   const refresh = () => queryClient.invalidateQueries({ queryKey: scienceKey });
 
   const startMutation = useMutation({
@@ -39,6 +34,14 @@ export function ScienceControl() {
           defaultValue: `启动 Claude Science 失败：${extractErrorMessage(error)}`,
         }),
       ),
+  });
+
+  const { data: status, isLoading } = useQuery({
+    queryKey: scienceKey,
+    queryFn: scienceApi.getStatus,
+    refetchInterval: (query) =>
+      startMutation.isPending || query.state.data?.running ? 3000 : 15000,
+    placeholderData: (previous) => previous,
   });
 
   const stopMutation = useMutation({
@@ -69,11 +72,13 @@ export function ScienceControl() {
       ),
   });
 
-  const pending =
-    isLoading ||
-    startMutation.isPending ||
-    stopMutation.isPending ||
-    openMutation.isPending;
+  const pending = isScienceControlPending({
+    isLoading,
+    isStarting: startMutation.isPending,
+    isRunning: Boolean(status?.running),
+    isStopping: stopMutation.isPending,
+    isOpening: openMutation.isPending,
+  });
   const unavailable = status && (!status.supported || !status.installed);
   const title = status?.running
     ? t("science.runningTitle", {

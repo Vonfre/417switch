@@ -25,6 +25,7 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
+#[cfg(not(target_os = "macos"))]
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
@@ -1827,6 +1828,25 @@ fn validate_science_browser_url(url: &str) -> Result<Url, String> {
 
 fn open_science_surface(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
     let parsed = validate_science_browser_url(url)?;
+
+    #[cfg(target_os = "macos")]
+    {
+        // Tauri's opener can remain pending on some ad-hoc signed macOS
+        // builds even after Science is healthy. Dispatch through Launch
+        // Services explicitly so the start command can return and the UI
+        // does not stay stuck in its loading state.
+        let _ = app;
+        let status = Command::new("/usr/bin/open")
+            .arg(parsed.as_str())
+            .status()
+            .map_err(|e| format!("调用 macOS 系统浏览器失败：{e}"))?;
+        if !status.success() {
+            return Err(format!("macOS 系统浏览器返回失败状态：{status}"));
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "macos"))]
     app.opener()
         .open_url(parsed.as_str(), None::<String>)
         .map_err(|e| format!("使用系统浏览器打开 Claude Science 失败：{e}"))
