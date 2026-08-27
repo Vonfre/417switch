@@ -24,7 +24,8 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 #[cfg(not(target_os = "macos"))]
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
@@ -36,6 +37,7 @@ const SCIENCE_PORT: u16 = 15_890;
 const SCIENCE_PREVIEW_PORT: u16 = 15_891;
 const REAL_SCIENCE_PORT: u16 = 8_765;
 const MANAGED_SCIENCE_STARTUP_GRACE: Duration = Duration::from_secs(45);
+const HOST_GRANT_PROBE_TIMEOUT: Duration = Duration::from_millis(250);
 const OFFICIAL_APP_BIN: &str =
     "/Applications/Claude Science.app/Contents/Resources/bin/claude-science";
 const UPDATED_BIN_RELATIVE: &str = ".claude-science/bin/claude-science";
@@ -2227,6 +2229,60 @@ fn remove_host_grant_keys(preferences: &mut Value, temporary_keys: &[String]) ->
     changed
 }
 
+fn host_grant_path(key: &str) -> Option<PathBuf> {
+    let path = key
+        .strip_prefix("ro:")
+        .or_else(|| key.strip_prefix("rw:"))
+        .filter(|path| !path.is_empty())?;
+    let path = PathBuf::from(path);
+    path.is_absolute().then_some(path)
+}
+
+fn remove_slow_or_unresolvable_host_grants(preferences: &mut Value) -> bool {
+    let candidates = preferences
+        .pointer("/approvalGrants/always/allow/host")
+        .and_then(Value::as_array)
+        .map(|hosts| {
+            hosts
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|key| (key.to_string(), host_grant_path(key)))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if candidates.is_empty() {
+        return false;
+    }
+
+    // Probe every grant concurrently and put a small shared cap on this
+    // preflight. A host path that cannot resolve promptly would otherwise
+    // make Science replay it during sandbox-init for seconds at a time.
+    let deadline = Instant::now() + HOST_GRANT_PROBE_TIMEOUT;
+    let probes = candidates
+        .into_iter()
+        .map(|(key, path)| {
+            let (sender, receiver) = mpsc::sync_channel(1);
+            std::thread::spawn(move || {
+                let resolvable = path.is_some_and(|path| {
+                    std::fs::canonicalize(path).is_ok_and(|path| path.is_dir())
+                });
+                let _ = sender.send(resolvable);
+            });
+            (key, receiver)
+        })
+        .collect::<Vec<_>>();
+    let invalid = probes
+        .into_iter()
+        .filter_map(|(key, receiver)| {
+            match receiver.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+                Ok(true) => None,
+                Ok(false) | Err(_) => Some(key),
+            }
+        })
+        .collect::<Vec<_>>();
+    remove_host_grant_keys(preferences, &invalid)
+}
+
 fn remove_temporary_host_browse_grants() -> Result<(), String> {
     let mut state = load_temporary_host_browse_state()?;
     let mut temporary_keys = state
@@ -2261,7 +2317,10 @@ fn remove_temporary_host_browse_grants() -> Result<(), String> {
             }
             let mut preferences: Value = serde_json::from_slice(&bytes)
                 .map_err(|e| format!("解析 Science 偏好设置失败：{e}"))?;
-            if remove_host_grant_keys(&mut preferences, &temporary_keys) {
+            let removed_temporary = remove_host_grant_keys(&mut preferences, &temporary_keys);
+            let removed_slow_or_unresolvable =
+                remove_slow_or_unresolvable_host_grants(&mut preferences);
+            if removed_temporary || removed_slow_or_unresolvable {
                 let output = serde_json::to_vec_pretty(&preferences)
                     .map_err(|e| format!("序列化 Science 偏好设置失败：{e}"))?;
                 safe_write(&preferences_path, &[output, b"\n".to_vec()].concat(), 0o600)?;
@@ -2908,6 +2967,35 @@ mod tests {
             MANAGED_SCIENCE_STARTUP_GRACE
         )));
         assert!(should_restart_unhealthy_managed_science(None));
+    }
+
+    #[test]
+    fn slow_or_unresolvable_host_grants_are_pruned_without_touching_resolvable_ones() {
+        let temp = tempfile::tempdir_in("/private/tmp").unwrap();
+        let existing = format!("rw:{}", temp.path().display());
+        let missing = "ro:/private/tmp/417switch-science-grant-does-not-exist";
+        let mut preferences = json!({
+            "approvalGrants": {
+                "always": { "allow": { "host": [existing.clone(), missing] } },
+                "alwaysOrigins": {
+                    "host": {
+                        existing.clone(): { "userId": "local-dev" },
+                        missing: { "userId": "local-dev" }
+                    }
+                }
+            }
+        });
+        assert!(remove_slow_or_unresolvable_host_grants(&mut preferences));
+        assert_eq!(
+            preferences.pointer("/approvalGrants/always/allow/host"),
+            Some(&json!([existing.clone()]))
+        );
+        assert!(preferences
+            .pointer("/approvalGrants/alwaysOrigins/host")
+            .and_then(Value::as_object)
+            .is_some_and(
+                |origins| origins.contains_key(&existing) && !origins.contains_key(missing)
+            ));
     }
 
     #[test]

@@ -5,6 +5,15 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.20.6] - 2026-08-27
+
+### Fixed
+
+- Probe persisted Claude Science host-directory grants before launch and remove
+  grants whose paths cannot be resolved promptly. This prevents Science's
+  sandbox initialization from replaying a stale or blocking directory grant
+  for tens of seconds while preserving grants for responsive directories.
+
 ## [3.20.5] - 2026-08-27
 
 ### Fixed
