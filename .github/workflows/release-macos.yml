@@ -79,10 +79,11 @@ jobs:
 
             ### 主要更新
 
-            - 修复 Claude Science 已健康运行但 417Switch 仍一直显示“启动中”
-            - macOS 直接通过系统 Launch Services 打开 Science 登录页面
-            - 启动期间持续轮询状态，检测到健康进程后立即提供“打开 Science”操作
-            - 保留 v3.20.1 的 Science 重启接管和主窗口尺寸修复
+            - Claude Science Provider 现在支持连通性检测
+            - Claude Science Provider 现在支持用量脚本测试、查询和卡片展示
+            - 使用统计新增独立的 Claude Science 筛选、图标和主题
+            - Science 继续使用 Claude 协议，但 Provider、探测日志和用量均保持独立命名空间
+            - 清理仓库中误提交的历史 macOS 应用包残留
 
             ### macOS 下载
 

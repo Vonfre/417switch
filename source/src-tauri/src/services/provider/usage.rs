@@ -128,8 +128,20 @@ pub async fn query_usage(
     app_type: AppType,
     provider_id: &str,
 ) -> Result<UsageResult, AppError> {
+    let provider_namespace = app_type.as_str().to_string();
+    query_usage_for_namespace(state, app_type, &provider_namespace, provider_id).await
+}
+
+/// Query usage with a provider namespace that differs from the wire protocol.
+/// Claude Science speaks the Claude protocol but stores providers separately.
+pub async fn query_usage_for_namespace(
+    state: &AppState,
+    app_type: AppType,
+    provider_namespace: &str,
+    provider_id: &str,
+) -> Result<UsageResult, AppError> {
     let (script_code, timeout, api_key, base_url, access_token, user_id, template_type) = {
-        let providers = state.db.get_all_providers(app_type.as_str())?;
+        let providers = state.db.get_all_providers(provider_namespace)?;
         let provider = providers.get(provider_id).ok_or_else(|| {
             AppError::localized(
                 "provider.not_found",
@@ -202,7 +214,38 @@ pub async fn test_usage_script(
     user_id: Option<&str>,
     template_type: Option<&str>,
 ) -> Result<UsageResult, AppError> {
-    let providers = state.db.get_all_providers(app_type.as_str())?;
+    let provider_namespace = app_type.as_str().to_string();
+    test_usage_script_for_namespace(
+        state,
+        app_type,
+        &provider_namespace,
+        provider_id,
+        script_code,
+        timeout,
+        api_key,
+        base_url,
+        access_token,
+        user_id,
+        template_type,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn test_usage_script_for_namespace(
+    state: &AppState,
+    app_type: AppType,
+    provider_namespace: &str,
+    provider_id: &str,
+    script_code: &str,
+    timeout: u64,
+    api_key: Option<&str>,
+    base_url: Option<&str>,
+    access_token: Option<&str>,
+    user_id: Option<&str>,
+    template_type: Option<&str>,
+) -> Result<UsageResult, AppError> {
+    let providers = state.db.get_all_providers(provider_namespace)?;
     let provider = providers.get(provider_id).ok_or_else(|| {
         AppError::localized(
             "provider.not_found",

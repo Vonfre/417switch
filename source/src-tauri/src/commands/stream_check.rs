@@ -13,17 +13,28 @@ use crate::store::AppState;
 use std::collections::HashSet;
 use tauri::State;
 
+fn resolve_stream_check_app(app_type: &str) -> Result<(AppType, String), AppError> {
+    if app_type.trim().eq_ignore_ascii_case("science") {
+        return Ok((AppType::Claude, "science".to_string()));
+    }
+
+    let protocol_app = app_type.parse::<AppType>()?;
+    let provider_namespace = protocol_app.as_str().to_string();
+    Ok((protocol_app, provider_namespace))
+}
+
 /// 连通性检查（单个供应商）
 #[tauri::command]
 pub async fn stream_check_provider(
     state: State<'_, AppState>,
     copilot_state: State<'_, CopilotAuthState>,
-    app_type: AppType,
+    app_type: String,
     provider_id: String,
 ) -> Result<StreamCheckResult, AppError> {
+    let (protocol_app, provider_namespace) = resolve_stream_check_app(&app_type)?;
     let config = state.db.get_stream_check_config()?;
 
-    let providers = state.db.get_all_providers(app_type.as_str())?;
+    let providers = state.db.get_all_providers(&provider_namespace)?;
     let provider = providers
         .get(&provider_id)
         .ok_or_else(|| AppError::Message(format!("供应商 {provider_id} 不存在")))?;
@@ -32,14 +43,14 @@ pub async fn stream_check_provider(
     // 其余供应商传 None，由服务层从 settings_config 提取 base_url。无需鉴权。
     let base_url_override = resolve_copilot_base_url_override(provider, &copilot_state).await?;
     let result =
-        StreamCheckService::check_with_retry(&app_type, provider, &config, base_url_override)
+        StreamCheckService::check_with_retry(&protocol_app, provider, &config, base_url_override)
             .await?;
 
     // 记录日志
     let _ =
         state
             .db
-            .save_stream_check_log(&provider_id, &provider.name, app_type.as_str(), &result);
+            .save_stream_check_log(&provider_id, &provider.name, &provider_namespace, &result);
 
     Ok(result)
 }
@@ -49,18 +60,19 @@ pub async fn stream_check_provider(
 pub async fn stream_check_all_providers(
     state: State<'_, AppState>,
     copilot_state: State<'_, CopilotAuthState>,
-    app_type: AppType,
+    app_type: String,
     proxy_targets_only: bool,
 ) -> Result<Vec<(String, StreamCheckResult)>, AppError> {
+    let (protocol_app, provider_namespace) = resolve_stream_check_app(&app_type)?;
     let config = state.db.get_stream_check_config()?;
-    let providers = state.db.get_all_providers(app_type.as_str())?;
+    let providers = state.db.get_all_providers(&provider_namespace)?;
 
     let allowed_ids: Option<HashSet<String>> = if proxy_targets_only {
         let mut ids = HashSet::new();
-        if let Ok(Some(current_id)) = state.db.get_current_provider(app_type.as_str()) {
+        if let Ok(Some(current_id)) = state.db.get_current_provider(&provider_namespace) {
             ids.insert(current_id);
         }
-        if let Ok(queue) = state.db.get_failover_queue(app_type.as_str()) {
+        if let Ok(queue) = state.db.get_failover_queue(&provider_namespace) {
             for item in queue {
                 ids.insert(item.provider_id);
             }
@@ -86,24 +98,28 @@ pub async fn stream_check_all_providers(
 
         let base_url_override =
             resolve_copilot_base_url_override(&provider, &copilot_state).await?;
-        let result =
-            StreamCheckService::check_with_retry(&app_type, &provider, &config, base_url_override)
-                .await
-                .unwrap_or_else(|e| StreamCheckResult {
-                    status: HealthStatus::Failed,
-                    success: false,
-                    message: e.to_string(),
-                    response_time_ms: None,
-                    http_status: None,
-                    model_used: String::new(),
-                    tested_at: chrono::Utc::now().timestamp(),
-                    retry_count: 0,
-                    error_category: None,
-                });
+        let result = StreamCheckService::check_with_retry(
+            &protocol_app,
+            &provider,
+            &config,
+            base_url_override,
+        )
+        .await
+        .unwrap_or_else(|e| StreamCheckResult {
+            status: HealthStatus::Failed,
+            success: false,
+            message: e.to_string(),
+            response_time_ms: None,
+            http_status: None,
+            model_used: String::new(),
+            tested_at: chrono::Utc::now().timestamp(),
+            retry_count: 0,
+            error_category: None,
+        });
 
         let _ = state
             .db
-            .save_stream_check_log(&id, &provider.name, app_type.as_str(), &result);
+            .save_stream_check_log(&id, &provider.name, &provider_namespace, &result);
 
         results.push((id, result));
     }
@@ -173,7 +189,8 @@ fn is_copilot_provider(provider: &crate::provider::Provider) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_copilot_provider;
+    use super::{is_copilot_provider, resolve_stream_check_app};
+    use crate::app_config::AppType;
     use crate::provider::{Provider, ProviderMeta};
     use serde_json::json;
 
@@ -245,5 +262,12 @@ mod tests {
             provider.meta.as_ref().and_then(|meta| meta.is_full_url),
             Some(true)
         );
+    }
+
+    #[test]
+    fn science_uses_claude_protocol_with_its_own_provider_namespace() {
+        let (protocol, namespace) = resolve_stream_check_app("science").unwrap();
+        assert_eq!(protocol, AppType::Claude);
+        assert_eq!(namespace, "science");
     }
 }

@@ -124,6 +124,14 @@ describe("UsageDashboard", () => {
     expect(screen.getByTestId("select-5000")).toBeInTheDocument();
   });
 
+  it("shows Claude Science as a dedicated usage filter", () => {
+    renderDashboard();
+
+    expect(
+      screen.getByRole("button", { name: "usage.appFilter.science" }),
+    ).toBeInTheDocument();
+  });
+
   it("filters usage queries to Pi", async () => {
     renderDashboard();
 

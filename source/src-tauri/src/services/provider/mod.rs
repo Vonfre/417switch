@@ -6190,6 +6190,15 @@ impl ProviderService {
         usage::query_usage(state, app_type, provider_id).await
     }
 
+    pub async fn query_usage_for_namespace(
+        state: &AppState,
+        app_type: AppType,
+        provider_namespace: &str,
+        provider_id: &str,
+    ) -> Result<UsageResult, AppError> {
+        usage::query_usage_for_namespace(state, app_type, provider_namespace, provider_id).await
+    }
+
     /// Test usage script (re-export)
     #[allow(clippy::too_many_arguments)]
     pub async fn test_usage_script(
@@ -6207,6 +6216,36 @@ impl ProviderService {
         usage::test_usage_script(
             state,
             app_type,
+            provider_id,
+            script_code,
+            timeout,
+            api_key,
+            base_url,
+            access_token,
+            user_id,
+            template_type,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn test_usage_script_for_namespace(
+        state: &AppState,
+        app_type: AppType,
+        provider_namespace: &str,
+        provider_id: &str,
+        script_code: &str,
+        timeout: u64,
+        api_key: Option<&str>,
+        base_url: Option<&str>,
+        access_token: Option<&str>,
+        user_id: Option<&str>,
+        template_type: Option<&str>,
+    ) -> Result<UsageResult, AppError> {
+        usage::test_usage_script_for_namespace(
+            state,
+            app_type,
+            provider_namespace,
             provider_id,
             script_code,
             timeout,

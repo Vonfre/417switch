@@ -20,6 +20,16 @@ const TEMPLATE_TYPE_OFFICIAL_SUBSCRIPTION: &str = "official_subscription";
 const COPILOT_UNIT_PREMIUM: &str = "requests";
 const SCIENCE_APP_ID: &str = "science";
 
+fn resolve_provider_usage_app(app: &str) -> Result<(AppType, String), String> {
+    if app.trim().eq_ignore_ascii_case(SCIENCE_APP_ID) {
+        return Ok((AppType::Claude, SCIENCE_APP_ID.to_string()));
+    }
+
+    let app_type = AppType::from_str(app).map_err(|e| e.to_string())?;
+    let provider_namespace = app_type.as_str().to_string();
+    Ok((app_type, provider_namespace))
+}
+
 fn science_provider_base_url(provider: &Provider) -> Option<&str> {
     let settings = provider.settings_config.as_object()?;
     settings
@@ -674,7 +684,7 @@ pub async fn queryProviderUsage(
     #[allow(non_snake_case)] providerId: String, // 使用 camelCase 匹配前端
     app: String,
 ) -> Result<crate::provider::UsageResult, String> {
-    let app_type = AppType::from_str(&app).map_err(|e| e.to_string())?;
+    let (app_type, provider_namespace) = resolve_provider_usage_app(&app)?;
     // inner 可能以两种形式失败：
     //   1) 返回 Ok(UsageResult { success: false, .. }) —— 确定性失败（401、脚本
     //      报错、未知供应商等）。写进 UsageCache 并刷新托盘，让
@@ -688,23 +698,26 @@ pub async fn queryProviderUsage(
         &copilot_state,
         &xai_state,
         app_type.clone(),
+        &provider_namespace,
         &providerId,
     )
     .await;
     if let Ok(snapshot) = &inner {
         let payload = serde_json::json!({
             "kind": "script",
-            "appType": app_type.as_str(),
+            "appType": &provider_namespace,
             "providerId": &providerId,
             "data": snapshot,
         });
         if let Err(e) = app_handle.emit("usage-cache-updated", payload) {
             log::error!("emit usage-cache-updated (script) 失败: {e}");
         }
-        state
-            .usage_cache
-            .put_script(app_type, providerId, snapshot.clone());
-        crate::tray::schedule_tray_refresh(&app_handle);
+        if provider_namespace == app_type.as_str() {
+            state
+                .usage_cache
+                .put_script(app_type, providerId, snapshot.clone());
+            crate::tray::schedule_tray_refresh(&app_handle);
+        }
     }
     inner
 }
@@ -758,12 +771,13 @@ async fn query_provider_usage_inner(
     copilot_state: &CopilotAuthState,
     xai_state: &XaiOAuthState,
     app_type: AppType,
+    provider_namespace: &str,
     provider_id: &str,
 ) -> Result<crate::provider::UsageResult, String> {
     // 从数据库读取供应商信息，检查特殊模板类型
     let providers = state
         .db
-        .get_all_providers(app_type.as_str())
+        .get_all_providers(provider_namespace)
         .map_err(|e| format!("Failed to get providers: {e}"))?;
     let provider = providers.get(provider_id);
     let usage_script = provider
@@ -970,7 +984,7 @@ async fn query_provider_usage_inner(
     }
 
     // ── 通用 JS 脚本路径 ──
-    ProviderService::query_usage(state, app_type, provider_id)
+    ProviderService::query_usage_for_namespace(state, app_type, provider_namespace, provider_id)
         .await
         .map_err(|e| e.to_string())
 }
@@ -990,10 +1004,11 @@ pub async fn testUsageScript(
     #[allow(non_snake_case)] userId: Option<String>,
     #[allow(non_snake_case)] templateType: Option<String>,
 ) -> Result<crate::provider::UsageResult, String> {
-    let app_type = AppType::from_str(&app).map_err(|e| e.to_string())?;
-    ProviderService::test_usage_script(
+    let (app_type, provider_namespace) = resolve_provider_usage_app(&app)?;
+    ProviderService::test_usage_script_for_namespace(
         state.inner(),
         app_type,
+        &provider_namespace,
         &providerId,
         &scriptCode,
         timeout.unwrap_or(10),
@@ -1190,7 +1205,8 @@ pub fn get_opencode_live_provider_ids() -> Result<Vec<String>, String> {
 
 #[cfg(test)]
 mod science_provider_validation_tests {
-    use super::validate_science_provider;
+    use super::{resolve_provider_usage_app, validate_science_provider};
+    use crate::app_config::AppType;
     use crate::provider::Provider;
     use serde_json::json;
 
@@ -1243,6 +1259,13 @@ mod science_provider_validation_tests {
         }));
         let error = validate_science_provider(&provider).expect_err("missing model");
         assert!(error.contains("至少需要配置一个模型"));
+    }
+
+    #[test]
+    fn science_usage_uses_claude_protocol_from_the_science_bucket() {
+        let (protocol, namespace) = resolve_provider_usage_app("science").unwrap();
+        assert_eq!(protocol, AppType::Claude);
+        assert_eq!(namespace, "science");
     }
 }
 

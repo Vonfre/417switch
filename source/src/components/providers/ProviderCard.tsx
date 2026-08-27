@@ -318,7 +318,6 @@ export function ProviderCard({
 
   const { data: usage } = useUsageQuery(provider.id, appId, {
     enabled:
-      appId !== "science" &&
       usageEnabled &&
       !isOfficial &&
       !isOfficialSubscriptionUsage,
@@ -708,7 +707,6 @@ export function ProviderCard({
                   : undefined
               }
               onConfigureUsage={
-                appId === "science" ||
                 (isOfficial && !supportsOfficialSubscription) ||
                 isCopilot ||
                 (isCodexOauth && !isBoundCodexOfficial) ||

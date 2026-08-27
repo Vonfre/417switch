@@ -21,6 +21,7 @@ import {
   LayoutGrid,
   DatabaseBackup,
   Loader2,
+  FlaskConical,
 } from "lucide-react";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import {
@@ -67,6 +68,7 @@ const normalizeRefreshInterval = (value: number | undefined) =>
 // 与 AppSwitcher 的 appIconName 保持一致（codex 复用 openai 图标）
 const APP_FILTER_ICON: Record<AppType, string> = {
   claude: "claude",
+  science: "claude",
   codex: "openai",
   gemini: "gemini",
   grokbuild: "grok",
@@ -271,6 +273,8 @@ export function UsageDashboard({
                 >
                   {type === "all" ? (
                     <LayoutGrid className="h-4 w-4" />
+                  ) : type === "science" ? (
+                    <FlaskConical className="h-4 w-4" />
                   ) : (
                     <ProviderIcon
                       icon={APP_FILTER_ICON[type]}
