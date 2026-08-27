@@ -5,6 +5,17 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.20.5] - 2026-08-27
+
+### Fixed
+
+- Do not wait a full minute for an unhealthy Claude Science daemon whose
+  private lock is older than the startup grace period. Start now securely
+  terminates that verified stale runtime and launches a replacement.
+- Make Stop bypass Science's unresponsive control socket and promptly
+  terminate only the verified managed runtime, falling back to a revalidated
+  force-stop only when its reserved ports remain held.
+
 ## [3.20.4] - 2026-08-27
 
 ### Fixed

@@ -35,6 +35,7 @@ use crate::store::AppState;
 const SCIENCE_PORT: u16 = 15_890;
 const SCIENCE_PREVIEW_PORT: u16 = 15_891;
 const REAL_SCIENCE_PORT: u16 = 8_765;
+const MANAGED_SCIENCE_STARTUP_GRACE: Duration = Duration::from_secs(45);
 const OFFICIAL_APP_BIN: &str =
     "/Applications/Claude Science.app/Contents/Resources/bin/claude-science";
 const UPDATED_BIN_RELATIVE: &str = ".claude-science/bin/claude-science";
@@ -730,6 +731,19 @@ fn temporary_host_browse_state_path() -> PathBuf {
 
 fn process_record_path() -> PathBuf {
     sandbox_data_dir().join("operon.lock")
+}
+
+fn process_record_age() -> Option<Duration> {
+    std::fs::metadata(process_record_path())
+        .ok()?
+        .modified()
+        .ok()?
+        .elapsed()
+        .ok()
+}
+
+fn should_restart_unhealthy_managed_science(record_age: Option<Duration>) -> bool {
+    record_age.is_none_or(|age| age >= MANAGED_SCIENCE_STARTUP_GRACE)
 }
 
 fn real_home_dir() -> Result<PathBuf, String> {
@@ -2616,22 +2630,31 @@ pub async fn start(app: &tauri::AppHandle, state: &AppState) -> Result<ScienceSt
                 });
             }
             ExistingScienceAction::WaitForReady => {
-                // A restarted 417Switch can observe the detached daemon after
-                // it has claimed the ports but before `/health` is ready. It
-                // is still our process, so adopt it instead of reporting that
-                // an unrelated process owns the isolation ports.
-                if wait_for_managed_science_ready(&existing).await {
-                    let url = science_url(&existing)?;
-                    open_science_surface(app, &url)?;
-                    return Ok(ScienceStartResult {
-                        url,
-                        provider_name: provider.name,
-                        runtime_source: existing.source.label().to_string(),
-                        runtime_version: existing.version,
-                    });
-                }
-                if managed_process(&existing).is_some() {
-                    return Err("417Switch 管理的 Claude Science 仍在启动，健康检查暂未就绪".into());
+                if should_restart_unhealthy_managed_science(process_record_age()) {
+                    // A listener with an old lock but no health response is a
+                    // wedged daemon, not an in-progress launch. Restart it
+                    // now instead of making every Start click wait a minute.
+                    stop().await?;
+                } else {
+                    // A restarted 417Switch can observe a newly detached
+                    // daemon after it has claimed the ports but before
+                    // `/health` is ready. Preserve a short grace period only
+                    // for that freshly written process record.
+                    if wait_for_managed_science_ready(&existing).await {
+                        let url = science_url(&existing)?;
+                        open_science_surface(app, &url)?;
+                        return Ok(ScienceStartResult {
+                            url,
+                            provider_name: provider.name,
+                            runtime_source: existing.source.label().to_string(),
+                            runtime_version: existing.version,
+                        });
+                    }
+                    if managed_process(&existing).is_some() {
+                        return Err(
+                            "417Switch 管理的 Claude Science 仍在启动，健康检查暂未就绪".into()
+                        );
+                    }
                 }
             }
             ExistingScienceAction::Restart => {
@@ -2748,6 +2771,41 @@ pub async fn stop() -> Result<(), String> {
         }
         return Err("Science 状态或 runtime 身份无法确认，已拒绝停止".into());
     };
+    if !health_ready(SCIENCE_PORT).await {
+        // A daemon can keep the ports and lock after its control socket has
+        // wedged. Calling `claude-science stop` in that state waits for the
+        // same dead socket, so terminate only this already verified runtime
+        // PID and return the Start action to a fresh launch quickly.
+        if process_matches_runtime(process.pid, &runtime) {
+            // SAFETY: managed_process and this immediate recheck verify the
+            // PID belongs to the exact private Science runtime.
+            unsafe {
+                libc::kill(process.pid as i32, libc::SIGTERM);
+            }
+            for _ in 0..20 {
+                if !science_ports_accept_tcp() {
+                    remove_stale_process_record(&runtime);
+                    return Ok(());
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            if process_matches_runtime(process.pid, &runtime) {
+                // SAFETY: the PID is still verified after its graceful-stop
+                // window elapsed and is still holding the Science ports.
+                unsafe {
+                    libc::kill(process.pid as i32, libc::SIGKILL);
+                }
+                for _ in 0..20 {
+                    if !science_ports_accept_tcp() {
+                        remove_stale_process_record(&runtime);
+                        return Ok(());
+                    }
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            }
+        }
+        return Err("Science 控制服务无响应，已尝试终止受管进程但隔离端口仍未释放".into());
+    }
     // Revocation is best-effort. A stale Science daemon can keep its HTTP
     // control endpoint half-open, so never let cleanup delay the actual stop.
     let _ = tokio::time::timeout(Duration::from_secs(3), revoke_host_browse_roots(&runtime)).await;
@@ -2839,6 +2897,17 @@ mod tests {
             existing_science_action(false, false, true),
             ExistingScienceAction::Ignore
         );
+    }
+
+    #[test]
+    fn only_old_or_unreadable_locks_restart_an_unhealthy_managed_science() {
+        assert!(!should_restart_unhealthy_managed_science(Some(
+            MANAGED_SCIENCE_STARTUP_GRACE - Duration::from_secs(1)
+        )));
+        assert!(should_restart_unhealthy_managed_science(Some(
+            MANAGED_SCIENCE_STARTUP_GRACE
+        )));
+        assert!(should_restart_unhealthy_managed_science(None));
     }
 
     #[test]

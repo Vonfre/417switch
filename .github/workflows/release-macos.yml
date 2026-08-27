@@ -79,10 +79,10 @@ jobs:
 
             ### 主要更新
 
-            - 启动 Claude Science 前自动检测两个隔离端口的监听进程
-            - 仅自动终止当前用户、且可执行文件精确匹配 Science runtime 的残留进程
-            - 对未知端口占用者继续保持保护，并在错误中显示端口和 PID
-            - 自动清理已停止 Science 进程遗留的私有锁记录
+            - Claude Science 已监听端口但健康检查无响应时，启动不再固定等待一分钟
+            - 仅对超过启动宽限期的、已验证 Science runtime 残留进程自动重启
+            - 停止操作绕过无响应的 Science 控制 socket，并继续保持 PID/runtime 双重校验
+            - 未知端口占用者仍会被保护，不会自动终止
 
             ### macOS 下载
 
