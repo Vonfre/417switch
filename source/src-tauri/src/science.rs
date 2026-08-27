@@ -17,7 +17,7 @@ use reqwest::header::{COOKIE, ORIGIN, SET_COOKIE};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{File, OpenOptions};
 use std::io::{Cursor, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
@@ -1654,6 +1654,225 @@ fn port_accepts_tcp(port: u16) -> bool {
     .is_ok()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct SciencePortListener {
+    port: u16,
+    pid: u32,
+    uid: u32,
+}
+
+fn parse_lsof_listeners(port: u16, output: &str) -> Vec<SciencePortListener> {
+    let mut pid = None;
+    let mut listeners = BTreeSet::new();
+    for line in output.lines() {
+        if let Some(value) = line.strip_prefix('p') {
+            pid = value.trim().parse::<u32>().ok();
+        } else if let (Some(pid), Some(value)) = (pid, line.strip_prefix('u')) {
+            if let Ok(uid) = value.trim().parse::<u32>() {
+                listeners.insert(SciencePortListener { port, pid, uid });
+            }
+        }
+    }
+    listeners.into_iter().collect()
+}
+
+fn port_listeners(port: u16) -> Result<Vec<SciencePortListener>, String> {
+    let output = Command::new("/usr/sbin/lsof")
+        .args([
+            "-nP",
+            "-a",
+            &format!("-iTCP:{port}"),
+            "-sTCP:LISTEN",
+            "-Fpu",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .map_err(|e| format!("检查 Science 端口 {port} 失败：{e}"))?;
+    // lsof uses exit code 1 when the selection matched no open files.
+    if !output.status.success() && output.status.code() != Some(1) {
+        return Err(format!(
+            "检查 Science 端口 {port} 失败（lsof 状态 {}）",
+            output.status
+        ));
+    }
+    Ok(parse_lsof_listeners(
+        port,
+        &String::from_utf8_lossy(&output.stdout),
+    ))
+}
+
+fn science_port_listeners() -> Result<Vec<SciencePortListener>, String> {
+    let mut listeners = port_listeners(SCIENCE_PORT)?;
+    listeners.extend(port_listeners(SCIENCE_PREVIEW_PORT)?);
+    listeners.sort_unstable();
+    listeners.dedup();
+    Ok(listeners)
+}
+
+fn process_uid(pid: u32) -> Option<u32> {
+    if pid == 0 || pid > i32::MAX as u32 {
+        return None;
+    }
+    let output = Command::new("/usr/sbin/lsof")
+        .args(["-a", "-p", &pid.to_string(), "-Fpu"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix('u')?.trim().parse().ok())
+}
+
+fn listener_is_reclaimable(listener: SciencePortListener, uid: u32, matches_runtime: bool) -> bool {
+    listener.uid == uid && matches_runtime
+}
+
+fn listeners_summary(listeners: &[SciencePortListener]) -> String {
+    listeners
+        .iter()
+        .map(|listener| format!("{}:PID {}", listener.port, listener.pid))
+        .collect::<Vec<_>>()
+        .join("，")
+}
+
+fn science_ports_accept_tcp() -> bool {
+    port_accepts_tcp(SCIENCE_PORT) || port_accepts_tcp(SCIENCE_PREVIEW_PORT)
+}
+
+async fn wait_for_science_ports_release() -> bool {
+    for _ in 0..20 {
+        if !science_ports_accept_tcp()
+            && science_port_listeners().is_ok_and(|listeners| listeners.is_empty())
+        {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    false
+}
+
+fn remove_stale_process_record(runtime: &RuntimeRecord) {
+    if managed_process(runtime).is_some() || science_ports_accept_tcp() {
+        return;
+    }
+    let path = process_record_path();
+    let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+        return;
+    };
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.uid() != current_uid()
+        || metadata.mode() & 0o022 != 0
+    {
+        return;
+    }
+    let _ = std::fs::remove_file(path);
+}
+
+async fn reclaim_stale_science_ports(runtime: &RuntimeRecord) -> Result<bool, String> {
+    let listeners = science_port_listeners()?;
+    if listeners.is_empty() {
+        if science_ports_accept_tcp() {
+            return Err(
+                "Science 隔离端口仍被占用，但无法安全识别监听进程；未自动终止未知进程".into(),
+            );
+        }
+        remove_stale_process_record(runtime);
+        return Ok(false);
+    }
+
+    let uid = current_uid();
+    let unknown = listeners
+        .iter()
+        .copied()
+        .filter(|listener| {
+            !listener_is_reclaimable(
+                *listener,
+                uid,
+                process_matches_runtime(listener.pid, runtime),
+            )
+        })
+        .collect::<Vec<_>>();
+    if !unknown.is_empty() {
+        return Err(format!(
+            "Science 隔离端口被非受管进程占用（{}）；为避免误杀未自动终止",
+            listeners_summary(&unknown)
+        ));
+    }
+
+    let pids = listeners
+        .iter()
+        .map(|listener| listener.pid)
+        .collect::<BTreeSet<_>>();
+    for pid in &pids {
+        if process_uid(*pid) == Some(uid) && process_matches_runtime(*pid, runtime) {
+            // SAFETY: lsof identified this PID as the current user's listener
+            // on a reserved Science port, and its executable was revalidated
+            // against the exact selected Science runtime immediately above.
+            unsafe {
+                libc::kill(*pid as i32, libc::SIGTERM);
+            }
+        }
+    }
+    if wait_for_science_ports_release().await {
+        remove_stale_process_record(runtime);
+        return Ok(true);
+    }
+
+    let remaining = science_port_listeners()?;
+    if remaining.is_empty() {
+        return Err("Science 隔离端口未能在终止残留进程后释放".into());
+    }
+    let unknown = remaining
+        .iter()
+        .copied()
+        .filter(|listener| {
+            !listener_is_reclaimable(
+                *listener,
+                uid,
+                process_uid(listener.pid) == Some(uid)
+                    && process_matches_runtime(listener.pid, runtime),
+            )
+        })
+        .collect::<Vec<_>>();
+    if !unknown.is_empty() {
+        return Err(format!(
+            "Science 残留进程退出期间端口占用者发生变化（{}）；未向未知进程发送强制信号",
+            listeners_summary(&unknown)
+        ));
+    }
+
+    for pid in remaining
+        .iter()
+        .map(|listener| listener.pid)
+        .collect::<BTreeSet<_>>()
+    {
+        if process_uid(pid) == Some(uid) && process_matches_runtime(pid, runtime) {
+            // SAFETY: the still-listening PID and exact runtime identity were
+            // revalidated after the graceful shutdown timeout.
+            unsafe {
+                libc::kill(pid as i32, libc::SIGKILL);
+            }
+        }
+    }
+    if !wait_for_science_ports_release().await {
+        let remaining = science_port_listeners().unwrap_or_default();
+        return Err(format!(
+            "已自动终止 Science 残留进程，但隔离端口仍未释放{}",
+            (!remaining.is_empty())
+                .then(|| format!("（{}）", listeners_summary(&remaining)))
+                .unwrap_or_default()
+        ));
+    }
+    remove_stale_process_record(runtime);
+    Ok(true)
+}
+
 async fn health_ready(port: u16) -> bool {
     let Ok(client) = reqwest::Client::builder()
         .timeout(Duration::from_millis(500))
@@ -2425,11 +2644,8 @@ pub async fn start(app: &tauri::AppHandle, state: &AppState) -> Result<ScienceSt
             ExistingScienceAction::Ignore => {}
         }
     }
-    if port_accepts_tcp(SCIENCE_PORT) || port_accepts_tcp(SCIENCE_PREVIEW_PORT) {
-        return Err("Science 隔离端口已被其他进程占用".into());
-    }
-
     let runtime = select_runtime()?;
+    reclaim_stale_science_ports(&runtime).await?;
     let chinese_patch = chinese_patch_enabled();
     let assets_root = if chinese_patch {
         Some(patched_science_assets_root(&runtime)?)
@@ -2623,6 +2839,37 @@ mod tests {
             existing_science_action(false, false, true),
             ExistingScienceAction::Ignore
         );
+    }
+
+    #[test]
+    fn lsof_listener_parser_deduplicates_process_records_per_port() {
+        assert_eq!(
+            parse_lsof_listeners(15_890, "p123\nu501\nf4\np123\nu501\nf5\np456\nu502\n"),
+            vec![
+                SciencePortListener {
+                    port: 15_890,
+                    pid: 123,
+                    uid: 501,
+                },
+                SciencePortListener {
+                    port: 15_890,
+                    pid: 456,
+                    uid: 502,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn only_current_user_listener_running_exact_runtime_is_reclaimable() {
+        let listener = SciencePortListener {
+            port: SCIENCE_PORT,
+            pid: 123,
+            uid: 501,
+        };
+        assert!(listener_is_reclaimable(listener, 501, true));
+        assert!(!listener_is_reclaimable(listener, 502, true));
+        assert!(!listener_is_reclaimable(listener, 501, false));
     }
 
     #[test]

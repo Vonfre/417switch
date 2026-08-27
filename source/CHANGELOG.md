@@ -5,6 +5,19 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.20.4] - 2026-08-27
+
+### Fixed
+
+- Make the Claude Science Start action automatically reclaim stale isolation
+  port listeners when the listener belongs to the current user and its
+  executable exactly matches the selected Science runtime. Unknown listeners
+  remain protected and are reported with their port and PID instead of being
+  terminated.
+- Remove a stale private Science process record after its verified listener is
+  stopped, so a missing or outdated `operon.lock` can no longer trap the Start
+  action in a repeated port-conflict error.
+
 ## [3.20.3] - 2026-08-27
 
 ### Fixed
