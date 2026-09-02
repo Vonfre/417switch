@@ -2633,6 +2633,22 @@ pub async fn status(state: &AppState) -> ScienceStatus {
     }
 }
 
+/// Whether the managed Claude Science daemon still depends on 417Switch's
+/// shared local proxy. Claude Science and Claude Desktop use different route
+/// prefixes on the same proxy process, so stopping that process while Science
+/// is alive would silently strand its inference traffic.
+pub async fn is_route_in_use() -> bool {
+    if !cfg!(target_os = "macos") {
+        return false;
+    }
+
+    let Some(runtime) = load_runtime() else {
+        return false;
+    };
+
+    managed_process(&runtime).is_some() || health_ready(SCIENCE_PORT).await
+}
+
 async fn ensure_science_proxy(state: &AppState) -> Result<u16, String> {
     let proxy = state.proxy_service.start().await?;
     if proxy.address != "127.0.0.1" && proxy.address != "localhost" {

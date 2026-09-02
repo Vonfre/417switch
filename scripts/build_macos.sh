@@ -8,10 +8,12 @@ saved_app="$project_dir/artifacts/macos/417Switch.app"
 
 cd "$source_dir"
 pnpm install --frozen-lockfile
+rm -rf "$built_app"
 pnpm tauri build --bundles app
 codesign --force --deep --sign - "$built_app"
 codesign --verify --deep --strict "$built_app"
 mkdir -p "$project_dir/artifacts/macos"
+rm -rf "$saved_app"
 ditto "$built_app" "$saved_app"
 
 echo "417Switch 已构建并保存到：$saved_app"

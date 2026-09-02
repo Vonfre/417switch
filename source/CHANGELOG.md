@@ -5,6 +5,22 @@ All notable changes to 417Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.20.7] - 2026-09-02
+
+### Fixed
+
+- Prevent the shared local proxy from being stopped while Claude Science still
+  depends on it, avoiding silently stranded Science inference requests.
+- Explain which 417Switch takeover or Claude Science route is keeping the
+  shared proxy active when Claude Desktop attempts to stop it.
+
+### Internal
+
+- Verify that Claude Science and Claude Desktop retain independent current
+  provider routes.
+- Replace existing app bundles before local macOS builds and artifact copies,
+  preventing files from different versions from being merged into one app.
+
 ## [3.20.6] - 2026-08-27
 
 ### Fixed

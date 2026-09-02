@@ -28,17 +28,38 @@ pub async fn start_proxy_server(
 /// 停止代理服务器（仅停止服务，不恢复/清理 Live 接管状态）
 #[tauri::command]
 pub async fn stop_proxy_server(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let takeover = state.proxy_service.get_takeover_status().await?;
-    if takeover.claude
-        || takeover.codex
-        || takeover.gemini
-        || takeover.grokbuild
-        || takeover.opencode
-        || takeover.openclaw
-    {
+    if crate::science::is_route_in_use().await {
         return Err(
-            "仍有应用处于代理接管状态，请先在设置中关闭对应应用接管后再停止本地路由。".to_string(),
+            "Claude Science 正在使用共享本地路由。请先停止 Claude Science，再关闭本地路由。"
+                .to_string(),
         );
+    }
+
+    let takeover = state.proxy_service.get_takeover_status().await?;
+    let mut active_apps = Vec::new();
+    if takeover.claude {
+        active_apps.push("Claude Code");
+    }
+    if takeover.codex {
+        active_apps.push("Codex");
+    }
+    if takeover.gemini {
+        active_apps.push("Gemini CLI");
+    }
+    if takeover.grokbuild {
+        active_apps.push("Grok Build");
+    }
+    if takeover.opencode {
+        active_apps.push("OpenCode");
+    }
+    if takeover.openclaw {
+        active_apps.push("OpenClaw");
+    }
+    if !active_apps.is_empty() {
+        return Err(format!(
+            "417Switch 的 {} 接管正在使用共享本地路由；这不是 CCSwitch 进程冲突。请先关闭对应应用接管，再停止本地路由。",
+            active_apps.join("、")
+        ));
     }
 
     state.proxy_service.stop().await
@@ -47,6 +68,13 @@ pub async fn stop_proxy_server(state: tauri::State<'_, AppState>) -> Result<(), 
 /// 停止代理服务器（恢复 Live 配置）
 #[tauri::command]
 pub async fn stop_proxy_with_restore(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    if crate::science::is_route_in_use().await {
+        return Err(
+            "Claude Science 正在使用共享本地路由。请先停止 Claude Science，再关闭代理总开关。"
+                .to_string(),
+        );
+    }
+
     state.proxy_service.stop_with_restore().await
 }
 

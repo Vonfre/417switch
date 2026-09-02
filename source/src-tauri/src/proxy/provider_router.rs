@@ -405,6 +405,41 @@ mod tests {
 
     #[tokio::test]
     #[serial]
+    async fn science_and_claude_desktop_keep_independent_current_routes() {
+        let _home = TempHome::new();
+        let db = Arc::new(Database::memory().unwrap());
+
+        let science = Provider::with_id(
+            "science-current".to_string(),
+            "Science Current".to_string(),
+            json!({}),
+            None,
+        );
+        let desktop = Provider::with_id(
+            "desktop-current".to_string(),
+            "Desktop Current".to_string(),
+            json!({}),
+            None,
+        );
+
+        db.save_provider("science", &science).unwrap();
+        db.save_provider("claude-desktop", &desktop).unwrap();
+        db.set_current_provider("science", &science.id).unwrap();
+        db.set_current_provider("claude-desktop", &desktop.id)
+            .unwrap();
+
+        let router = ProviderRouter::new(db);
+        let science_routes = router.select_providers("science").await.unwrap();
+        let desktop_routes = router.select_providers("claude-desktop").await.unwrap();
+
+        assert_eq!(science_routes.len(), 1);
+        assert_eq!(science_routes[0].id, science.id);
+        assert_eq!(desktop_routes.len(), 1);
+        assert_eq!(desktop_routes[0].id, desktop.id);
+    }
+
+    #[tokio::test]
+    #[serial]
     async fn test_failover_enabled_uses_queue_order_ignoring_current() {
         let _home = TempHome::new();
         let db = Arc::new(Database::memory().unwrap());

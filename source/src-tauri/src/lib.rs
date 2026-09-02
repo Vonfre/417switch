@@ -83,6 +83,10 @@ mod science {
         }
     }
 
+    pub async fn is_route_in_use() -> bool {
+        false
+    }
+
     pub async fn start(
         _app: &tauri::AppHandle,
         _state: &AppState,
